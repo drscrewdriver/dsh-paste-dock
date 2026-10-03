@@ -1,0 +1,45 @@
+# dsh-paste-dock bundle layer — applied when a profile lists this bundle
+# (package.json declares `dsh.bundle.patch` pointing at this file).
+#
+# PITFALL: `name` is a PACKAGE NAME (resolved through the profile's node_modules
+# or the installation fallback `$DSH_HOME/profiles/node_modules`), NOT a
+# relative path. One row serves both halves: the Host loads the package main
+# export (pasteStore service + save_paste tool) and the web client loads the
+# `./client` export (composer paste listener, dsh.client.platform: web).
+- insert:
+    - id: dsh-paste-dock
+      name: dsh-paste-dock
+      config:
+        # Large-paste threshold (chars) — the DEPLOYMENT DEFAULT. A user can
+        # override it in Settings → General ("大段粘贴阈值"); that override applies
+        # live and is what "恢复默认" clears. Where it is STORED depends on the dsh
+        # line: 0.1.5 keeps it in dsh's own settings document, while 0.1.7 projects
+        # settings out of each plugin's Config and writes this field back into the
+        # profile patch (this very file). That is why src/index.ts declares it
+        # volatile — without that, dsh generates no form for this plugin and
+        # refuses the write outright.
+        # One authority either way: a client bundle never receives a row config
+        # (dsh.client accepts only platform/inject/external/immediately, and the
+        # boot graph carries no config), so the web client fetches the effective
+        # value over the pasteStore/getConfig RPC. Change here + restart dsh —
+        # no rebuild needed.
+        minChars: 500
+        # Byte ceiling for one paste (host-enforced before anything is written).
+        # Default 1048576 (1 MiB); hard ceiling 67108864 (64 MiB) — over that the
+        # host logs an error and falls back to the default. Omit = default.
+        maxBytes: 1048576
+        # Composer chip style — DEPLOYMENT DEFAULT, no restart-sensitive semantics:
+        # plain booleans (NOT volatile), so the 0.1.7 settings projection simply
+        # renders them as ordinary fields and the write lands in this file as usual.
+        # true (default): the draft chip renders as the minimal `📄` badge and the
+        #   full card (name · char count · path · remove · open) lives in the dock
+        #   above the composer.
+        # false: the chip carries the full `文件名 · N 字符` label again; the dock
+        #   (below) is unaffected.
+        # Reaches the browser only via pasteStore/getConfig — a client bundle never
+        # sees a row config. Change here + restart dsh, no rebuild needed.
+        chipBadge: true
+        # The dock above the composer (attachment cards, remove, open). false hides
+        # the slot registration entirely — saving still works, the draft just keeps
+        # the chip/badge as its only surface. Same wire path as chipBadge.
+        dock: true
