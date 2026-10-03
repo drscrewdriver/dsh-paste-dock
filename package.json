@@ -1,0 +1,87 @@
+{
+  "name": "dsh-paste-dock",
+  "version": "0.1.3",
+  "description": "dsh-paste-dock — DeepSeek Harness 插件:大段文本粘贴自动存为 pastes/*.txt,输入框上方 dock 卡片管理,草稿内只留最小徽标。",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drscrewdriver/dsh-paste-dock.git"
+  },
+  "homepage": "https://github.com/drscrewdriver/dsh-paste-dock",
+  "license": "MIT",
+  "author": "drscrewdriver",
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "deepseek-harness",
+    "paste",
+    "attachment",
+    "dock"
+  ],
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./typert": "./dist/typert.host.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "sessions",
+        "connection"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsdown && node scripts/sync-lib.mjs",
+    "build:client": "tsdown",
+    "build:all": "tsc -p tsconfig.json && tsdown && node scripts/sync-lib.mjs",
+    "release": "node scripts/release.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "test": "node --test tests/release.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.js\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
+    "metrics": "node tools/metrics.mjs",
+    "privacy": "node tools/privacy-scan.mjs"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1 || ^0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.5-rc.1 || ^0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-session": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-tools": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.5-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "espree": "^11.2.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.6.0"
+  }
+}
