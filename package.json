@@ -53,8 +53,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
     "test": "node --test tests/release.test.js",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.js\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\" \"smoke.mjs\" \"tests/**/*.js\" \"tsdown.config.ts\"",
     "metrics": "node tools/metrics.mjs",
     "privacy": "node tools/privacy-scan.mjs"
   },
