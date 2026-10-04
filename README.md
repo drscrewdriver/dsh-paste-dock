@@ -66,7 +66,7 @@ npm run lint && npm run format:check && npm run privacy && npm run metrics
 
 源码结构:`src/index.ts` + `src/typert.host.ts`(宿主半身,tsc);`src/client/*.ts`(web 半身,按 shared/rpc/composer/chip/registry/dock/toast/hint/settings 分模块,tsdown 打成单文件 `dist/client.js`,保持 `window.__ModuleLoader__.load` 装载契约)。
 
-peer 范围 `^0.1.5-rc.1 || ^0.2.0-rc.2` 两段并列——别改回单段或开区间,dsh 挂载前逐包 semver 校验,不满足整包拒载。
+peer 范围 `0.1.0-rc.2` || `0.1.0-rc.3` || `0.1.0-rc.6` || `0.1.0-rc.7` || `0.1.0-rc.8` || `0.1.1-rc.1` || `0.1.1-rc.2` || `0.1.2-rc.1` || `0.1.5-rc.1` || `0.1.5-rc.2` || `0.1.5-rc.3` || `0.1.7-rc.1` || `0.1.7-rc.2` || `0.2.0-rc.1` || `0.2.0-rc.2` 枚举白名单——由 scripts/hosts.mjs 经 `node scripts/sync-hosts.mjs --write` 下发,与 `engines.dsh` 同源;dsh 挂载前逐包 semver 校验,不满足整包拒载,勿手改。
 
 ## License
 
