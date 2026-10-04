@@ -299,7 +299,7 @@ const REQUIRED_IN_PACK = [
   'dist/client.js', // web client 半身
   'dist/typert.host.js',
   'src/index.ts', // 源码随包（可审查）
-  'src/client.js',
+  'src/client/index.ts', // client 源入口（模块化拆分后为 src/client/*.ts 目录）
   'cordis.patch.yml', // dsh 装配 patch
   'package.json',
 ]
