@@ -376,7 +376,12 @@ console.log(`  ⚠️ 0.1.5 与 0.1.6 两次都栽在这里（tag 指向的提�
 console.log(`     publish.yml 第一步就退出：tag=0.1.6  package.json=0.1.5）。`)
 console.log('')
 console.log('  请按顺序做三步：')
-console.log(`    ① 等 PR 的 checks / gate 双绿后合并：  gh pr merge ${branch} --merge`)
+console.log(`    ① 等 PR 的 checks / gate 双绿后合并：  gh pr merge ${branch} --rebase`)
+console.log(
+  '       （用 --rebase 不用 --merge：GitHub 生成的合并提交 author 是账号主邮箱，',
+  '         会同时泄进公开历史并让 privacy 门禁对 main 常红；rebase 保留 noreply',
+  '         作者且 main 保持线性历史。2026-10-04 v0.1.4 实证。）',
+)
 console.log(`    ② 回 main 并快进：                     git checkout main && git pull --ff-only`)
 console.log(`    ③ **先自查再打 tag**（这一步是新增的守卫，别跳过）：`)
 console.log(`         npm run release -- --tag`)
