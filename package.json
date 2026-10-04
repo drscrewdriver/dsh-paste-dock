@@ -1,6 +1,6 @@
 {
   "name": "dsh-paste-dock",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "dsh-paste-dock — DeepSeek Harness 插件:大段文本粘贴自动存为 pastes/*.txt,输入框上方 dock 卡片管理,草稿内只留最小徽标。",
   "repository": {
     "type": "git",
