@@ -30,7 +30,7 @@ export const supportedHosts = Object.freeze([
   '0.2.0-rc.2',
   // 0.2.1 线(2 rc)
   '0.2.1-rc.1',
-  '0.2.1-rc.2',
+  '0.2.1-rc.2', '0.2.1-rc.3',
 ])
 export const peerRange = supportedHosts.join(' || ')
 export const developmentHost = '0.2.0-rc.2' // devDependencies 全部钉这里
