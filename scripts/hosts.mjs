@@ -33,7 +33,7 @@ export const supportedHosts = Object.freeze([
   '0.2.1-rc.2', '0.2.1-rc.3',
 ])
 export const peerRange = supportedHosts.join(' || ')
-export const developmentHost = '0.2.0-rc.2' // devDependencies 全部钉这里
+export const developmentHost = '0.2.1-rc.3' // devDependencies 全部钉这里
 
 // 本仓契约断言(sync-hosts 调用)。参考仓模板的 requiredHostPeers 清单在本仓
 // 收窄为不变式:每条 dsh-* peer 都必须同串且等于 peerRange(spec §3.1 要求
