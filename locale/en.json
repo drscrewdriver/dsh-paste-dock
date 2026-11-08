@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Paste Dock",
+    "description": "Large pastes are saved as pastes/*.txt and managed from a dock card above the composer, leaving only a minimal chip in the draft."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dock de pegado",
+    "description": "Los pegados largos se guardan en pastes/*.txt y se gestionan desde una tarjeta dock sobre el campo de entrada; el borrador solo conserva una insignia mínima."
+  }
+}

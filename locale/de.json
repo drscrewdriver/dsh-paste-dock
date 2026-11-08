@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Einfüge-Dock",
+    "description": "Große Einfügungen werden als pastes/*.txt gespeichert und über eine Dock-Karte über dem Eingabefeld verwaltet; im Entwurf bleibt nur ein minimaler Chip."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dock de collage",
+    "description": "Les gros collages sont enregistrés dans pastes/*.txt et gérés depuis une carte dock au-dessus du champ de saisie ; le brouillon ne garde qu'une puce minimale."
+  }
+}

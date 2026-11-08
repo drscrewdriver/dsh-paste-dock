@@ -31,12 +31,15 @@
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
     "./typert": "./dist/typert.host.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "src",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "README.md",
+    "locale"
   ],
   "dsh": {
     "bundle": {
