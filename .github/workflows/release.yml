@@ -100,15 +100,20 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ⑨ 发布
+      # ⑨ 发布（rc 版本→ --tag rc，不动 latest）
       - name: npm publish
         if: steps.guard.outputs.exists == 'false' && (github.event_name == 'push' || inputs.dry_run == false)
-        run: npm publish --provenance --access public --registry https://registry.npmjs.org
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            *-rc*) echo "::notice::rc 版本 $VERSION → 发到 rc 标签"; npm publish --provenance --access public --tag rc --registry https://registry.npmjs.org ;;
+            *)     npm publish --provenance --access public --tag latest --registry https://registry.npmjs.org ;;
+          esac
 
-      # ⑩ dist-tag 同步
+      # ⑩ dist-tag 同步（rc 线跳过，不动 dsh-* 线标签）
       - name: 同步 dsh-* 线标签
         id: disttag
-        if: steps.guard.outputs.exists == 'false' && (github.event_name == 'push' || inputs.dry_run == false)
+        if: steps.guard.outputs.exists == 'false' && !contains(env.VERSION, '-rc') && (github.event_name == 'push' || inputs.dry_run == false)
         run: |
           set -uo pipefail
           REG=https://registry.npmjs.org
@@ -154,12 +159,15 @@ jobs:
             fi
           fi
           SIZE=$(wc -c < notes.md | tr -d ' ')
+          PRE_FLAG=""
+          case "$VERSION" in *-rc*) PRE_FLAG="--prerelease" ;; esac
           if [ "${SIZE:-0}" -ge 80 ]; then
-            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md $PRE_FLAG
           else
-            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes $PRE_FLAG
           fi
-          gh release edit "$TAG" --latest
+          # 正式版才设 Latest 徽标；rc 预发布不动 Latest
+          case "$VERSION" in *-rc*) : ;; *) gh release edit "$TAG" --latest ;; esac
 
       # ⑫ 事实表
       - name: Job Summary
