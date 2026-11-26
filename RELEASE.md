@@ -2,6 +2,15 @@
 
 > 发版走 `npm run release`(自动控版本号/构建/测试/pack 核对 → PR → 合并后打 tag → OIDC publish,`next` 观察后人工转 `latest`)。
 
+## 0.1.14 (2026-11-26)
+
+**设置卡底栏 Star 快车道：★ 直接打开仓库页（不再只静默收起），隐藏独立成 ×。**
+
+- 新增 `src/client/star-row-copy.ts`（由 `_tools/star-row/sync.mjs` 从 kit 真源生成，禁手改）：GitHub 图标 + owner/repo 链接 ｜ 求星话术 ｜ ★ CTA ｜ × 隐藏。
+- **修 S 档旧缺陷**：点 ★ 此前写成 `starDismiss()`，与「别打扰我」合流，仓库页一次都没打开过。现在 ★ 走锚点 click 打开 `REPO_URL`（不写 dismissed），× 才写 `dsh.star.<ns>.dismissed=1` 并收话术与两钮；链接段永留。
+- 真源 `STAR:EXTENDED` 段单源维护，A/L 档副本由 sync 整段剥除，已发布 A/L 仓零 diff。
+- 文案 10 语按 `documentElement.lang` 前缀自选；样式只走 `--dsw-alias-*` 令牌与 `currentColor`，零硬色。
+
 ## v0.1.3(客户端 TS 化 + 源级守卫迁移,直发 `latest`)
 
 - **web 半身 TS 化**:`src/client.js` 巨石(约 1700 行)拆为 `src/client/` 九个严格类型模块(shared/rpc/composer/chip/registry/dock/toast/hint/settings + index 入口),`tsc -p tsconfig.client.json` 严格检查;tsdown 打成**同一个** `__ModuleLoader__` 单文件 `dist/client.js`,装载契约与产物形状逐字节兼容。
