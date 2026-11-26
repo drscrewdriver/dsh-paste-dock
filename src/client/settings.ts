@@ -5,6 +5,7 @@ import * as React from 'react'
 import { PACKAGE, shared, type anyCtx } from './shared'
 import { applyRemoteConfig, callPasteStore, fetchHostConfig } from './rpc'
 import { subscribeSidebar, readSidebar } from './hint'
+import { mountStarRow } from './star-row-copy'
 
 // dsh's own seat for "a single setting that needs no page of its own". Its
 // doc is explicit that the row draws its own internals — copy, current value
@@ -139,6 +140,7 @@ function SettingsMinCharsRow() {
         },
         '保存',
       ),
+      React.createElement('span', { ref: (node: HTMLElement | null) => { if (node && !node.firstChild) node.appendChild(mountStarRow()) } }),
       remote !== null && remote.minCharsSource === 'user'
         ? React.createElement(
             'button',
@@ -174,6 +176,7 @@ function SettingsSidebarRow() {
       { className: 'dsh-paste-dock-row-main' },
       React.createElement('div', { className: 'dsh-paste-dock-row-label' }, '侧栏集成'),
       React.createElement('div', { className: 'dsh-paste-dock-row-hint' }, SIDEBAR_ROW_TEXT),
+      React.createElement('span', { ref: (node: HTMLElement | null) => { if (node && !node.firstChild) node.appendChild(mountStarRow()) } }),
     ),
   )
 }
