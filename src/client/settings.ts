@@ -140,7 +140,11 @@ function SettingsMinCharsRow() {
         },
         '保存',
       ),
-      React.createElement('span', { ref: (node: HTMLElement | null) => { if (node && !node.firstChild) node.appendChild(mountStarRow()) } }),
+      React.createElement('span', {
+        ref: (node: HTMLElement | null) => {
+          if (node && !node.firstChild) node.appendChild(mountStarRow())
+        },
+      }),
       remote !== null && remote.minCharsSource === 'user'
         ? React.createElement(
             'button',
@@ -176,7 +180,11 @@ function SettingsSidebarRow() {
       { className: 'dsh-paste-dock-row-main' },
       React.createElement('div', { className: 'dsh-paste-dock-row-label' }, '侧栏集成'),
       React.createElement('div', { className: 'dsh-paste-dock-row-hint' }, SIDEBAR_ROW_TEXT),
-      React.createElement('span', { ref: (node: HTMLElement | null) => { if (node && !node.firstChild) node.appendChild(mountStarRow()) } }),
+      React.createElement('span', {
+        ref: (node: HTMLElement | null) => {
+          if (node && !node.firstChild) node.appendChild(mountStarRow())
+        },
+      }),
     ),
   )
 }
