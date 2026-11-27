@@ -23,22 +23,22 @@
 
 ```powershell
 # 1) 把这三个文件放进仓库
-#    privacy-gate.mjs  -> <repo>/tools/privacy-gate.mjs
-#    commit.mjs        -> <repo>/tools/commit.mjs
+#    privacy-gate.ts  -> <repo>/tools/privacy-gate.ts
+#    commit.ts        -> <repo>/tools/commit.ts
 #    githooks/*        -> <repo>/.githooks/{pre-commit,pre-push}
 
 # 2) 挂上（幂等，可回滚）
-node tools/install-hooks.mjs
+node tools/install-hooks.ts
 
 # 3) 回滚（任何时候）
-node tools/install-hooks.mjs --uninstall
+node tools/install-hooks.ts --uninstall
 ```
 
 POSIX 克隆若钩子不生效：`git update-index --chmod=+x .githooks/pre-commit .githooks/pre-push`
 
 ### L2 怎么配（这步才是真闸门，必须做）
 
-1. 仓库加一个 CI job：`node tools/privacy-gate.mjs --staged`（PR 场景用 `--range origin/main...HEAD`）
+1. 仓库加一个 CI job：`node tools/privacy-gate.ts --staged`（PR 场景用 `--range origin/main...HEAD`）
 2. GitHub → Settings → Rules → **Require status checks to pass**，把这个 job 勾上
 3. 同时勾 **Do not allow bypassing the above settings**（否则你自己也能推）
 4. 可选：Settings → Code security → 开 **push protection**（只挡前缀型密钥，**不挡本机路径/PII**，别指望它）
@@ -68,10 +68,10 @@ POSIX 克隆若钩子不生效：`git update-index --chmod=+x .githooks/pre-comm
 **`sh.exe` 在 DSH 沙箱里起不来**（`couldn't create signal pipe, Win32 error 5`），
 而 **Git 在 Windows 上执行钩子必经 `sh`** ⇒ **装了钩子之后，沙箱内的裸 `git commit` 会直接失败**（一条 Cygwin 报错）。
 
-⇒ 这条会把 agent 逼去用 `--no-verify` —— 那正是"门禁退化成装饰"的最短路径。**所以提供了 `commit.mjs`**：
+⇒ 这条会把 agent 逼去用 `--no-verify` —— 那正是"门禁退化成装饰"的最短路径。**所以提供了 `commit.ts`**：
 
 ```powershell
-node tools/commit.mjs -m "docs: ..."        # 先过门禁，过了才提交，不需要 sh
+node tools/commit.ts -m "docs: ..."        # 先过门禁，过了才提交，不需要 sh
 ```
 
 它是**等价执行**（门禁先跑，过了才提交，并显式跳过钩子），**不是绕过通道** —— 实测：泄漏暂存时它 `exit 1` 拒绝提交。
@@ -79,14 +79,14 @@ node tools/commit.mjs -m "docs: ..."        # 先过门禁，过了才提交，�
 | 场景 | 用什么 |
 |---|---|
 | 你自己的终端 | 裸 `git commit` / `git push`（钩子正常，sh 可用） |
-| DSH 沙箱内 | `node tools/commit.mjs -m "..."` |
+| DSH 沙箱内 | `node tools/commit.ts -m "..."` |
 
 ---
 
 ## 五、自测（改规则后必跑）
 
 ```powershell
-node privacy-gate.mjs --selftest     # 规则级：正例必红 / 白名单必绿
+node privacy-gate.ts --selftest     # 规则级：正例必红 / 白名单必绿
 node selftest-e2e.mjs                # 端到端：安装器 / --staged / --range / --stdin-refs / --all / shim
 ```
 

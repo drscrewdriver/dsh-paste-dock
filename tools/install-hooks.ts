@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * install-hooks.mjs —— 一键挂上隐私门禁钩子（幂等，可回滚）
+ * install-hooks.ts —— 一键挂上隐私门禁钩子（幂等，可回滚）
  *
  * 做的事只有三件（**不改任何被跟踪文件的内容**）：
- *   1. 校验 tools/privacy-gate.mjs 与 .githooks/{pre-commit,pre-push} 都在位
+ *   1. 校验 tools/privacy-gate.ts 与 .githooks/{pre-commit,pre-push} 都在位
  *   2. `git config core.hooksPath .githooks`
  *   3. 回读验证 + 跑一次引擎自检当冒烟
  *
- * 用法：node tools/install-hooks.mjs [--repo <路径>] [--uninstall]
+ * 用法：node tools/install-hooks.ts [--repo <路径>] [--uninstall]
  */
 
 import { spawnSync } from 'node:child_process'
@@ -16,14 +16,20 @@ import { join, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const argv = process.argv.slice(2)
-const opt = (f) => {
+const opt = (f: string): string | undefined => {
   const i = argv.indexOf(f)
   return i >= 0 ? argv[i + 1] : undefined
 }
 const uninstall = argv.includes('--uninstall')
 
+interface GitResult {
+  status: number
+  text: string
+  err: string
+}
+
 /** 跑 git，stdout 落文件（不用管道——受限环境下管道会被拒）。 */
-function git(args, cwd) {
+function git(args: string[], cwd: string): GitResult {
   const tmp = mkdtempSync(join(tmpdir(), 'install-hooks-'))
   const out = join(tmp, 'out.txt')
   const fd = openSync(out, 'w')
@@ -35,7 +41,11 @@ function git(args, cwd) {
   }
   const text = existsSync(out) ? readFileSync(out, 'utf8') : ''
   rmSync(tmp, { recursive: true, force: true })
-  return { status: res.error ? -1 : res.status, text: text.trim(), err: res.error ? String(res.error) : '' }
+  return {
+    status: res.error ? -1 : (res.status ?? -1),
+    text: text.trim(),
+    err: res.error ? String(res.error) : '',
+  }
 }
 
 const start = opt('--repo') ?? process.cwd()
@@ -51,12 +61,16 @@ console.log(`仓库: ${repo}`)
 
 if (uninstall) {
   const r = git(['config', '--unset', 'core.hooksPath'], repo)
-  console.log(r.status === 0 ? '✅ 已卸载（core.hooksPath 已移除，钩子不再生效）' : `⚠️ 卸载返回 ${r.status}（可能本来就没设）`)
+  console.log(
+    r.status === 0
+      ? '✅ 已卸载（core.hooksPath 已移除，钩子不再生效）'
+      : `⚠️ 卸载返回 ${r.status}（可能本来就没设）`,
+  )
   process.exit(0)
 }
 
 // 1) 校验在位
-const need = ['tools/privacy-gate.mjs', '.githooks/pre-commit', '.githooks/pre-push']
+const need = ['tools/privacy-gate.ts', '.githooks/pre-commit', '.githooks/pre-push']
 let missing = 0
 for (const rel of need) {
   const ok = existsSync(join(repo, rel))
@@ -90,11 +104,15 @@ if (back.status !== 0 || back.text !== '.githooks') {
 console.log('  ✓ 回读验证通过')
 
 // 4) 冒烟：跑引擎自检（正例必红 / 白名单必绿）
-const smoke = spawnSync('node', [join(repo, 'tools/privacy-gate.mjs'), '--selftest'], {
+const smoke = spawnSync('node', [join(repo, 'tools/privacy-gate.ts'), '--selftest'], {
   cwd: repo,
   stdio: ['ignore', 'inherit', 'inherit'],
 })
-console.log(smoke.status === 0 ? '  ✓ 引擎自检全绿' : `  ✗ 引擎自检失败（exit ${smoke.status}）—— 门禁不可信，请先修`)
+console.log(
+  smoke.status === 0
+    ? '  ✓ 引擎自检全绿'
+    : `  ✗ 引擎自检失败（exit ${smoke.status}）—— 门禁不可信，请先修`,
+)
 
 console.log(`
 装好了。三层各自挡什么：
@@ -105,7 +123,7 @@ console.log(`
                      并禁止直接 push main ⇒ **本机绕不过去**
   L3 源头            审查/交接文档只写「类别 + 位置 + 命中数」，不抄命中值
 
-回滚：node tools/install-hooks.mjs --uninstall
+回滚：node tools/install-hooks.ts --uninstall
       （或 git config --unset core.hooksPath）
 
 POSIX 克隆注意（Windows 上 git 会自动处理）：

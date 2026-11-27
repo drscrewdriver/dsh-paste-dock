@@ -60,7 +60,7 @@ jobs:
 
       # ② Privacy gate（ci.yml 在 install 前跑，必须保留此序）
       - name: Privacy gate
-        run: node tools/privacy-scan.mjs
+        run: node tools/privacy-scan.ts
 
       # ③ 安装依赖
       - name: 安装依赖

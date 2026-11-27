@@ -111,7 +111,7 @@ npm run lint && npm run format:check && npm run privacy && npm run metrics
 
 Estrutura do código-fonte: `src/index.ts` + `src/typert.host.ts` (metade host, tsc); `src/client/*.ts` (metade web, modularizada por shared/rpc/composer/chip/registry/dock/toast/hint/settings, empacotada pelo tsdown num único `dist/client.js`, preservando o contrato de carregamento `window.__ModuleLoader__.load`).
 
-O intervalo peer `0.1.0-rc.2` || `0.1.0-rc.3` || `0.1.0-rc.6` || `0.1.0-rc.7` || `0.1.0-rc.8` || `0.1.1-rc.1` || `0.1.1-rc.2` || `0.1.2-rc.1` || `0.1.5-rc.1` || `0.1.5-rc.2` || `0.1.5-rc.3` || `0.1.7-rc.1` || `0.1.7-rc.2` || `0.2.0-rc.1` || `0.2.0-rc.2` || `0.2.1-rc.1` || `0.2.1-rc.2` || `0.2.1-rc.3` || `0.2.1-rc.4` || `0.2.1-rc.5` || `0.2.2-rc.1` é uma whitelist enumerada — distribuída por scripts/hosts.mjs via `node scripts/sync-hosts.mjs --write`, mesma fonte do `engines.dsh`; antes de montar o dsh cada pacote é validado por semver e, se não bater, o pacote inteiro é recusado; não edite na mão.
+O intervalo peer `0.1.0-rc.2` || `0.1.0-rc.3` || `0.1.0-rc.6` || `0.1.0-rc.7` || `0.1.0-rc.8` || `0.1.1-rc.1` || `0.1.1-rc.2` || `0.1.2-rc.1` || `0.1.5-rc.1` || `0.1.5-rc.2` || `0.1.5-rc.3` || `0.1.7-rc.1` || `0.1.7-rc.2` || `0.2.0-rc.1` || `0.2.0-rc.2` || `0.2.1-rc.1` || `0.2.1-rc.2` || `0.2.1-rc.3` || `0.2.1-rc.4` || `0.2.1-rc.5` || `0.2.2-rc.1` é uma whitelist enumerada — distribuída por scripts/hosts.ts via `node scripts/sync-hosts.ts --write`, mesma fonte do `engines.dsh`; antes de montar o dsh cada pacote é validado por semver e, se não bater, o pacote inteiro é recusado; não edite na mão.
 
 ## License
 

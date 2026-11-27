@@ -8,4 +8,4 @@
 #
 # Bypass: git push --no-verify   (discrete and auditable)
 
-exec node "$(git rev-parse --show-toplevel)/tools/privacy-gate.mjs" --stdin-refs
+exec node "$(git rev-parse --show-toplevel)/tools/privacy-gate.ts" --stdin-refs

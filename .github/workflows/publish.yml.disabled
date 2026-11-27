@@ -52,7 +52,7 @@ jobs:
 
       # 阻断门：必须在 npm publish 之前，且必须在装依赖之前（纯 node，无依赖）。
       - name: Privacy gate (identity + history + package)
-        run: node tools/privacy-scan.mjs
+        run: node tools/privacy-scan.ts
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
