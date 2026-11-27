@@ -39,6 +39,37 @@ Publicado no npm, dá para `dsh plugin --profile <p> add dsh-paste-dock`. No Des
 
 O bundle do cliente não alcança row config; os valores acima chegam pela RPC `pasteStore/getConfig`, e os padrões locais são só fallback.
 
+## Diretório de pastes e limpeza automática (desde 0.1.27)
+
+O padrão continua sendo `pastes/` dentro do workspace — comportamento inalterado.
+Dois novos campos permitem movê-lo ou definir retenção:
+
+| Campo | Padrão | Significado |
+| --- | --- | --- |
+| `pasteDir` | `''` | vazio = `pastes/` no workspace; relativo = subdiretório do workspace (ex. `scratch/pastes`); absoluto = diretório fora dele (ex. `/tmp/dsh-pastes`). Um `..` é erro, nunca redirecionamento silencioso |
+| `retainDays` | `0` | janela de limpeza em dias. `0` = nunca apagar (padrão); teto 3650. Roda após uma gravação bem-sucedida |
+
+O escopo é estreito de propósito: **somente os pastes deste plugin**
+(`YYYYMMDD-HHMMSSmmm[-label].txt`), somente esse diretório (nunca recursivo); seus
+próprios arquivos ali nunca são tocados.
+
+Dentro do workspace a referência continua relativa (`pastes/x.txt`); fora dele ela
+passa a ser **absoluta** — a gramática `@` do dsh resolve caminhos relativos a
+partir da raiz do workspace e trata caminhos absolutos como arquivos do host.
+
+Se `pastes/` aparece como `?? pastes/` no `git status`, escolha uma:
+
+```bash
+# 1) manter fora do repositório
+echo 'pastes/' >> .gitignore
+
+# 2) ignorar apenas nesta máquina
+echo 'pastes/' >> .git/info/exclude
+
+# 3) apontar pasteDir para fora do workspace
+# cordis.patch.yml → pasteDir: 'C:/temp/dsh-pastes'
+```
+
 ## Disciplina sugerida no AGENTS.md
 
 ```markdown

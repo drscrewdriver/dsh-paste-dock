@@ -39,6 +39,32 @@ npm 发布后可 `dsh plugin --profile <p> add dsh-paste-dock`。桌面版需在
 
 客户端 bundle 拿不到 row config,以上值经 `pasteStore/getConfig` RPC 下发,本地默认仅兜底。
 
+## 粘贴目录与自动清理(0.1.27 起)
+
+默认仍然写工作区的 `pastes/`(行为不变)。两个新配置项让你把它挪走或设保留期:
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `pasteDir` | `''` | 空=工作区 `pastes/`;相对=工作区内子目录(如 `scratch/pastes`);绝对=工作区外目录(如 `/tmp/dsh-pastes`)。含 `..` 直接报错,不会静默改道 |
+| `retainDays` | `0` | 自动清理天数。`0`=永不删(默认);上限 3650。只在保存成功后按需清理 |
+
+清理范围刻意很窄:**只删本插件自己的** `YYYYMMDD-HHMMSSmmm[-label].txt`,只处理粘贴目录这一层(不递归),同目录里你自己的文件一律不动。
+
+工作区内仍用相对引用 `pastes/x.txt`;落点在工作区外时引用改用**绝对路径**(dsh 的 `@` 引用按官方的「相对从工作区根解析、绝对指向主机文件」规则读得到)。
+
+如果 `pastes/` 让 `git status` 出现 `?? pastes/`,任选一种:
+
+```bash
+# 方案一:不落进仓库
+echo 'pastes/' >> .gitignore
+
+# 方案二:只在本机忽略(不改仓库的 .gitignore)
+echo 'pastes/' >> .git/info/exclude
+
+# 方案三:配 pasteDir 指到工作区外
+# cordis.patch.yml → pasteDir: 'C:/temp/dsh-pastes'
+```
+
 ## 建议搭配 AGENTS.md 纪律
 
 ```markdown

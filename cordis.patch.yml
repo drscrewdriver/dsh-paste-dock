@@ -43,3 +43,19 @@
         # the slot registration entirely — saving still works, the draft just keeps
         # the chip/badge as its only surface. Same wire path as chipBadge.
         dock: true
+        # Where pastes land. '' (default) keeps the historical workspace `pastes/`
+        # — the DEFAULT IS DELIBERATELY UNCHANGED. A relative value is a
+        # subdirectory of the workspace (`scratch/pastes`); an absolute path puts
+        # pastes outside it (`C:/temp/dsh-pastes`), in which case the reference in
+        # the composer carries the ABSOLUTE path so dsh can still resolve it.
+        # `..` is refused by name (a typo is reported, never silently redirected).
+        # Useful for repos where `?? pastes/` is inconvenient: point this at a
+        # temp dir, or add `pastes/` to .gitignore instead.
+        pasteDir: ''
+        # Automatic cleanup of this plugin's OWN pastes, in days. 0 (default) = never
+        # delete — the plugin must not remove user files unless explicitly asked.
+        # Runs after a successful save, bounded: only files in the paste directory
+        # whose names match this plugin's own `YYYYMMDD-HHMMSSmmm[-label].txt`
+        # pattern and are older than the window. Never recursive; nothing else in
+        # that directory is touched. Ceiling 3650 days.
+        retainDays: 0

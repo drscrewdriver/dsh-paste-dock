@@ -5,7 +5,16 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
-import { readFileSync, mkdirSync, writeFileSync, cpSync, rmSync, mkdtempSync } from 'node:fs'
+import {
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+  cpSync,
+  rmSync,
+  mkdtempSync,
+  readdirSync,
+  utimesSync,
+} from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -17,6 +26,8 @@ import {
   assertPasteSize,
   sanitizeLabel,
   resolveMaxBytes,
+  resolvePasteDir,
+  resolveRetainDays,
   resolveFlag,
   resolveMinChars,
   effectiveMinChars,
@@ -1079,8 +1090,11 @@ describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client h
   // B1 — pastes can hold sensitive text: private dir/file modes on POSIX
   // (Windows ignores `mode`, so this is additive there, not a behaviour change).
   test('paste writes are private: 0700 directory, 0600 file', () => {
+    // 0.1.27 made the directory configurable, so the mkdir target is now a
+    // resolved `targetDir` rather than literally `dirname(base)` — the MODE is
+    // what this guard is about, and it must stay private on every path.
     const src = readHost()
-    assert.match(src, /mkdir\(dirname\(base\), \{ recursive: true, mode: 0o700 \}\)/)
+    assert.match(src, /mkdir\(targetDir, \{ recursive: true, mode: 0o700 \}\)/)
     assert.match(src, /writeFile\(candidate, text, \{ flag: 'wx', mode: 0o600 \}\)/)
   })
 
@@ -2303,5 +2317,95 @@ describe('V10 · 0.1.26 — the settings row survives a stalled read (#30)', () 
       2,
       'input + save still lock while a write is in flight',
     )
+  })
+})
+
+describe('V11 · 0.1.27 — the paste directory is configurable (#27)', () => {
+  test('resolvePasteDir keeps the historical default and resolves all three shapes', () => {
+    assert.equal(resolvePasteDir(undefined), undefined, 'undefined = the workspace pastes/')
+    assert.equal(resolvePasteDir(''), undefined, 'empty = the same default')
+    assert.deepEqual(resolvePasteDir('pastes'), { kind: 'workspace', subdir: 'pastes' })
+    assert.deepEqual(resolvePasteDir('tmp/scratch'), { kind: 'workspace', subdir: 'tmp/scratch' })
+    const abs = resolvePasteDir(join(tmpdir(), 'elsewhere'))
+    assert.equal(abs.kind, 'absolute')
+    assert.equal(abs.dir, join(tmpdir(), 'elsewhere'))
+  })
+
+  test('resolvePasteDir refuses a .. escape and a non-string by name', () => {
+    assert.throws(() => resolvePasteDir('../escape'), /must not contain '\.\.'/)
+    assert.throws(() => resolvePasteDir('a/../../b'), /must not contain '\.\.'/)
+    assert.throws(() => resolvePasteDir(42), /pasteDir must be a string/)
+  })
+
+  test('resolveRetainDays: 0 by default, bounded, integer-only', () => {
+    assert.equal(resolveRetainDays(undefined), 0, 'the default must never delete')
+    assert.equal(resolveRetainDays(0), 0)
+    assert.equal(resolveRetainDays(7), 7)
+    assert.throws(() => resolveRetainDays(-1), /must not be negative/)
+    assert.throws(() => resolveRetainDays(3651), /exceeds the 3650-day ceiling/)
+    assert.throws(() => resolveRetainDays(1.5), /must be an integer/)
+  })
+
+  test('retainDays 0 leaves every file alone', async () => {
+    const dir = await tmpDir()
+    try {
+      const now = new Date(2026, 7, 15, 20, 30, 6, 123)
+      mkdirSync(join(dir, 'pastes'), { recursive: true })
+      writeFileSync(join(dir, 'pastes', '20200101-000000000.txt'), 'ancient')
+      writeFileSync(join(dir, 'pastes', 'notes.md'), 'mine')
+      const result = await savePasteTo(dir, 'new paste', now, undefined, undefined, undefined, 0)
+      const names = readdirSync(join(dir, 'pastes'))
+      assert.ok(names.includes('20200101-000000000.txt'), 'retention is OFF by default')
+      assert.ok(names.includes('notes.md'))
+      assert.ok(result.path.startsWith('pastes/'), 'still the workspace-relative shape')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('retainDays 7 prunes only this plugin’s own expired pastes', async () => {
+    const dir = await tmpDir()
+    try {
+      const now = new Date(2026, 7, 15, 20, 30, 6, 123)
+      mkdirSync(join(dir, 'pastes'), { recursive: true })
+      const old = join(dir, 'pastes', '20260801-000000000.txt')
+      writeFileSync(old, 'eight days old')
+      const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000)
+      utimesSync(old, eightDaysAgo, eightDaysAgo)
+      // Not ours (wrong shape) or not old (within the window): both must survive.
+      writeFileSync(join(dir, 'pastes', 'notes.md'), 'mine')
+      writeFileSync(join(dir, 'pastes', 'foo.txt'), 'mine too')
+      writeFileSync(join(dir, 'pastes', '20260814-000000000.txt'), 'one day old')
+      await savePasteTo(dir, 'new paste', now, undefined, undefined, undefined, 7)
+      const names = readdirSync(join(dir, 'pastes'))
+      assert.ok(!names.includes('20260801-000000000.txt'), 'the expired paste is gone')
+      assert.ok(names.includes('notes.md'), 'a foreign file survives')
+      assert.ok(names.includes('foo.txt'), 'a foreign .txt survives')
+      assert.ok(names.includes('20260814-000000000.txt'), 'a fresh paste survives')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('a workspace subdirectory keeps the relative reference; an absolute one does not', async () => {
+    const ws = await tmpDir()
+    const outside = await tmpDir()
+    try {
+      const now = new Date(2026, 7, 15, 20, 30, 6, 123)
+      const inside = await savePasteTo(ws, 'x', now, undefined, undefined, {
+        kind: 'workspace',
+        subdir: 'scratch/pastes',
+      })
+      assert.match(inside.path, /^scratch\/pastes\/\d{8}-\d{6}\d{3}\.txt$/)
+      const far = await savePasteTo(ws, 'y', now, undefined, undefined, {
+        kind: 'absolute',
+        dir: outside,
+      })
+      assert.equal(far.path, far.absolutePath.split('\\').join('/'))
+      assert.ok(far.path.startsWith(outside.split('\\').join('/')), 'workspace-external = absolute')
+    } finally {
+      await rm(ws, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })

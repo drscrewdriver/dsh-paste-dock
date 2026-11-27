@@ -13,8 +13,8 @@
 // Pure ESM ("type": "module"); @deepseek-ai/cordis is a peerDependency —
 // the host hands us `ctx` and the Service base class at runtime.
 //
-import { join, dirname, basename, relative, normalize } from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { join, dirname, basename, relative, normalize, isAbsolute } from 'node:path'
+import { mkdir, writeFile, readdir, stat, unlink } from 'node:fs/promises'
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -236,6 +236,14 @@ export const Config = z.object({
   // these reach the browser as plain values, not live boxes.
   chipBadge: z.boolean().default(CHIP_BADGE_DEFAULT),
   dock: z.boolean().default(DOCK_DEFAULT),
+  // Where pastes land. '' (the default) keeps the historical workspace `pastes/`
+  // — the DEFAULT MUST NOT CHANGE. A relative value is a subdirectory of the
+  // workspace; an absolute one puts pastes outside it (the reference then carries
+  // the absolute path). Ordinary config: a directory is a deployment decision.
+  pasteDir: z.string().default(''),
+  // Automatic pruning of this plugin's own pastes, in days. 0 (the default) means
+  // never delete: removing user files requires an explicit opt-in.
+  retainDays: z.number().default(0),
 })
 
 /**
@@ -426,9 +434,102 @@ export function assertPasteSize(text: string, maxBytes: number = MAX_PASTE_BYTES
 export const MAX_COLLISION_ATTEMPTS = 1000
 
 /**
- * Write one paste under `<workspaceDir>/pastes/<timestamp>[-<label>].txt`.
+ * Where one paste lands. `subdir` is workspace-relative; `dir` is absolute.
+ */
+export type PasteDir = { kind: 'workspace'; subdir: string } | { kind: 'absolute'; dir: string }
+
+/** Upper bound on the configurable retention window (ten years). */
+export const MAX_RETAIN_DAYS = 3650
+
+/**
+ * Resolve the configured paste directory. Empty/undefined keeps the historical
+ * `pastes/` inside the workspace — the DEFAULT MUST NOT CHANGE. A relative value
+ * is a subdirectory of the workspace; an absolute one leaves the workspace,
+ * which works because the reference then carries the absolute path (dsh's own
+ * reference prompt says "relative paths resolve from the workspace root;
+ * absolute paths identify files or directories on the host", and the model reads
+ * them either way).
+ *
+ * A `..` escape is refused BY NAME rather than silently clamped: a config typo
+ * must be reported, not quietly redirected to some other directory.
+ */
+export function resolvePasteDir(raw: unknown): PasteDir | undefined {
+  if (raw === undefined || raw === '') return undefined
+  if (typeof raw !== 'string') {
+    throw new Error(`pasteDir must be a string (got ${JSON.stringify(raw)})`)
+  }
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  if (trimmed.split(/[\\/]+/).includes('..')) {
+    throw new Error(`pasteDir must not contain '..' (got ${JSON.stringify(raw)})`)
+  }
+  if (isAbsolute(trimmed)) return { kind: 'absolute', dir: normalize(trimmed) }
+  return { kind: 'workspace', subdir: trimmed.replace(/^[\\/]+/, '').replace(/[\\/]+$/, '') }
+}
+
+/**
+ * Retention in days for automatic pruning. `0` = never delete (the default: the
+ * plugin must not remove user files unless explicitly asked). Bounded so a typo
+ * cannot mean "delete everything older than a decade".
+ */
+export function resolveRetainDays(raw: unknown): number {
+  if (raw === undefined) return 0
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) {
+    throw new Error(`retainDays must be an integer (got ${JSON.stringify(raw)})`)
+  }
+  if (raw < 0) throw new Error(`retainDays must not be negative (got ${raw})`)
+  if (raw > MAX_RETAIN_DAYS) {
+    throw new Error(`retainDays ${raw} exceeds the ${MAX_RETAIN_DAYS}-day ceiling`)
+  }
+  return raw
+}
+
+/** File names this plugin is allowed to prune. Anything else is never touched. */
+const PASTE_NAME_RE = /^\d{8}-\d{6}\d{3}(-[A-Za-z0-9_-]{1,32})?\.txt$/
+
+/**
+ * Delete this plugin's own stale pastes under one directory. Deliberately narrow:
+ * only names matching the plugin's timestamp pattern, only files, never recursive,
+ * so a user file that happens to share the directory survives. Returns the names
+ * removed (for the log line and for tests).
+ */
+export async function prunePastes(
+  dir: string,
+  retainDays: number,
+  now: Date = new Date(),
+): Promise<string[]> {
+  if (retainDays <= 0) return []
+  const cutoff = now.getTime() - retainDays * 24 * 60 * 60 * 1000
+  let entries: string[]
+  try {
+    entries = await readdir(dir)
+  } catch {
+    // Nothing to prune in a directory the plugin has not written to yet.
+    return []
+  }
+  const removed: string[] = []
+  for (const name of entries) {
+    if (!PASTE_NAME_RE.test(name)) continue
+    const target = join(dir, name)
+    try {
+      const info = await stat(target)
+      if (!info.isFile() || info.mtimeMs >= cutoff) continue
+      await unlink(target)
+      removed.push(name)
+    } catch {
+      // A file that vanished or refuses deletion is not worth failing the paste.
+    }
+  }
+  return removed
+}
+
+/**
+ * Write one paste under `<targetDir>/<timestamp>[-<label>].txt`.
  * Pure standalone function — unit-testable without a booted harness.
  * Same-second collisions append `-<n>` AFTER the label (see the loop below).
+ *
+ * `dirSpec` selects the directory (see resolvePasteDir); `retainDays > 0` prunes
+ * this plugin's own stale pastes in that directory after a successful write.
  */
 export async function savePasteTo(
   workspaceDir: string,
@@ -436,14 +537,20 @@ export async function savePasteTo(
   now: Date = new Date(),
   maxBytes: number = MAX_PASTE_BYTES,
   label?: string,
+  dirSpec?: PasteDir,
+  retainDays: number = 0,
 ): Promise<SavePasteResult> {
   assertPasteSize(text, maxBytes)
-  const rel = join('pastes', pasteFilename(now, label))
-  const base = join(workspaceDir, rel)
+  const targetDir =
+    dirSpec?.kind === 'absolute'
+      ? dirSpec.dir
+      : join(workspaceDir, dirSpec?.kind === 'workspace' ? dirSpec.subdir : 'pastes')
+  const rel = pasteFilename(now, label)
+  const base = join(targetDir, rel)
   // Private by default: a paste can hold anything the user copied. 0700/0600 are
   // the POSIX answer (Windows ignores `mode`, where the per-user profile ACL
   // already scopes access, so this is additive rather than a behaviour change).
-  await mkdir(dirname(base), { recursive: true, mode: 0o700 })
+  await mkdir(targetDir, { recursive: true, mode: 0o700 })
   // Atomic exclusive create: EEXIST means another writer (concurrent
   // same-timestamp save, or an existing file) claimed this name first —
   // bump the -n suffix and retry. No check-then-write race window.
@@ -453,8 +560,7 @@ export async function savePasteTo(
   // cap converts "never finishes" into an error the user can act on.
   let target: string | undefined
   for (let n = 0; n < MAX_COLLISION_ATTEMPTS; n += 1) {
-    const candidate =
-      n === 0 ? base : join(workspaceDir, 'pastes', `${basename(rel, '.txt')}-${n}.txt`)
+    const candidate = n === 0 ? base : join(targetDir, `${basename(rel, '.txt')}-${n}.txt`)
     try {
       await writeFile(candidate, text, { flag: 'wx', mode: 0o600 })
       target = candidate
@@ -466,11 +572,24 @@ export async function savePasteTo(
   if (target === undefined) {
     throw new Error(
       `paste: gave up after ${MAX_COLLISION_ATTEMPTS} name collisions for ${rel}; ` +
-        'remove or rename the squatters under pastes/ and retry',
+        'remove or rename the squatters under the paste directory and retry',
     )
   }
+  // Prune only after a successful write, and only when the user opted in: this is
+  // a bounded scan of THIS directory (never recursive, never another name shape).
+  if (retainDays > 0) {
+    const removed = await prunePastes(targetDir, retainDays, now)
+    if (removed.length > 0) {
+      console.log(`[dsh-paste-dock] pruned ${removed.length} paste(s) older than ${retainDays}d`)
+    }
+  }
+  // Inside the workspace the reference stays a RELATIVE path (dsh resolves it from
+  // the workspace root, and the dock/sidebar read the same string). Outside it the
+  // reference must be ABSOLUTE — a relative one would be resolved against the
+  // workspace and point at a file that does not exist.
+  const inWorkspace = dirSpec === undefined || dirSpec.kind === 'workspace'
   return {
-    path: relative(workspaceDir, target).split('\\').join('/'),
+    path: (inWorkspace ? relative(workspaceDir, target) : target).split('\\').join('/'),
     absolutePath: target,
     bytes: Buffer.byteLength(text, 'utf8'),
     chars: text.length,
@@ -575,6 +694,10 @@ interface PluginConfigLike {
   maxBytes?: unknown
   chipBadge?: unknown
   dock?: unknown
+  /** '' / undefined = the historical workspace `pastes/`; relative = a subdir; absolute = outside. */
+  pasteDir?: unknown
+  /** 0 = never prune (default). See resolveRetainDays. */
+  retainDays?: unknown
 }
 
 /**
@@ -630,6 +753,24 @@ class PasteStoreService extends TypertRemoteService {
   /** The deployment default threshold, as configured right now. */
   private deploymentMinChars(): number {
     return this.knob(this.pluginConfig.minChars, resolveMinChars, MIN_CHARS_DEFAULT)
+  }
+
+  /** Where pastes land, as configured right now (see resolvePasteDir). */
+  private pasteDir(): PasteDir | undefined {
+    try {
+      return resolvePasteDir(readLiveValue(this.pluginConfig.pasteDir))
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Retention window, as configured right now; 0 means never prune. */
+  private retainDays(): number {
+    try {
+      return resolveRetainDays(readLiveValue(this.pluginConfig.retainDays))
+    } catch {
+      return 0
+    }
   }
 
   /** The byte ceiling for one paste, as configured right now. */
@@ -754,7 +895,17 @@ class PasteStoreService extends TypertRemoteService {
       throw new Error('pasteStore: no workspace available to save the paste into')
     // The browser half also gets the absolute path: the sidebar's file API refuses
     // relative ones, so [查看] would open a file it could never save back.
-    return wirePasteRef(await savePasteTo(dir, text, new Date(), this.maxBytes()))
+    return wirePasteRef(
+      await savePasteTo(
+        dir,
+        text,
+        new Date(),
+        this.maxBytes(),
+        undefined,
+        this.pasteDir(),
+        this.retainDays(),
+      ),
+    )
   }
 }
 
@@ -884,6 +1035,23 @@ export function apply(ctx: Context, config: PluginConfigLike = {}) {
         // Re-read HERE instead of reusing the boot-time snapshot: a config/settings
         // write lands in this same object while dsh keeps running, and the tool must
         // enforce exactly what the service enforces. Same authority (liveMaxBytesOf).
+        // Same live-read rule as maxBytes: the configured directory and retention
+        // are read HERE, so a config edit applies to the next tool call.
+        let toolDirSpec: PasteDir | undefined
+        try {
+          toolDirSpec = resolvePasteDir(readLiveValue(config.pasteDir))
+        } catch (error) {
+          console.error(
+            '[dsh-paste-dock] invalid pasteDir — falling back to workspace pastes/:',
+            error,
+          )
+        }
+        let toolRetainDays = 0
+        try {
+          toolRetainDays = resolveRetainDays(readLiveValue(config.retainDays))
+        } catch (error) {
+          console.error('[dsh-paste-dock] invalid retainDays — not pruning:', error)
+        }
         return publicPasteRef(
           await savePasteTo(
             dir,
@@ -891,6 +1059,8 @@ export function apply(ctx: Context, config: PluginConfigLike = {}) {
             new Date(),
             liveMaxBytesOf(config.maxBytes),
             args.label,
+            toolDirSpec,
+            toolRetainDays,
           ),
         )
       },
