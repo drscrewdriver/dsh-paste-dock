@@ -59,3 +59,10 @@
         # pattern and are older than the window. Never recursive; nothing else in
         # that directory is touched. Ceiling 3650 days.
         retainDays: 0
+        # Kill switch. true = this plugin intercepts NOTHING: every paste goes
+        # straight into the composer — no file, no chip, no dock card. For "I want
+        # this plugin installed but out of my way"; the one-off escape hatch is
+        # holding Shift while pasting (no config change needed).
+        # Deliberately NOT volatile (a deployment decision, not a row toggle), and
+        # deliberately NOT the default: false keeps 0.1.27 behavior exactly.
+        alwaysRaw: false

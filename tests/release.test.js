@@ -2409,3 +2409,51 @@ describe('V11 · 0.1.27 — the paste directory is configurable (#27)', () => {
     }
   })
 })
+
+describe('V12 · 0.1.28 — there is a way to paste raw (spill#1)', () => {
+  const clientIndex = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'index.ts'), 'utf8')
+
+  test('both bypasses sit BEFORE preventDefault (checked before anything is taken)', () => {
+    const src = clientIndex()
+    const alwaysAt = src.indexOf('if (shared.alwaysRaw) {')
+    const shiftAt = src.indexOf('shiftKey')
+    const preventAt = src.indexOf('event.preventDefault()')
+    assert.ok(alwaysAt > 0, 'the kill switch must be honoured')
+    assert.ok(shiftAt > 0, 'the one-off Shift escape hatch must exist')
+    assert.ok(preventAt > alwaysAt, 'checking after preventDefault is not a bypass')
+    assert.ok(preventAt > shiftAt, 'same for Shift')
+  })
+
+  test('the two bypasses are diagnosable (one console line each)', () => {
+    const src = clientIndex()
+    assert.match(src, /alwaysRaw is on — this paste is NOT intercepted/)
+    assert.match(src, /Shift held — this paste is NOT intercepted/)
+  })
+
+  test('the default is false on every layer: client state, Config, wire schema', () => {
+    assert.match(
+      readFileSync(join(PKG_ROOT, 'src', 'client', 'shared.ts'), 'utf8'),
+      /alwaysRaw: false,/,
+      'the client default must keep intercepting',
+    )
+    const host = readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
+    assert.match(host, /alwaysRaw: z\.boolean\(\)\.default\(false\)/, 'Config default false')
+    assert.match(host, /alwaysRaw: this\.flag\(this\.pluginConfig\.alwaysRaw, false\)/)
+    assert.match(host, /alwaysRaw: boolean/, 'it must be on the wire')
+    assert.match(
+      readFileSync(join(PKG_ROOT, 'src', 'typert.host.ts'), 'utf8'),
+      /alwaysRaw: z\.boolean\(\)/,
+      'the wire schema must carry it',
+    )
+  })
+
+  test('the config comment says the plugin stops intercepting entirely', () => {
+    const yml = readFileSync(join(PKG_ROOT, 'cordis.patch.yml'), 'utf8')
+    assert.match(
+      yml,
+      /alwaysRaw/,
+      'a kill switch nobody can find is not a kill switch — document it in the patch',
+    )
+    assert.match(yml, /intercepts NOTHING|不再拦截/)
+  })
+})

@@ -70,6 +70,19 @@ echo 'pastes/' >> .git/info/exclude
 # cordis.patch.yml → pasteDir: 'C:/temp/dsh-pastes'
 ```
 
+## Não interceptar: as saídas de texto cru (desde 0.1.28)
+
+Duas saídas independentes:
+
+| Como | Escopo | Uso |
+| --- | --- | --- |
+| `alwaysRaw: true` | global até voltar a `false` | defina `alwaysRaw: true` em `cordis.patch.yml` e reinicie o dsh. O plugin passa a **não** interceptar nenhuma colagem: sem arquivo, sem chip, sem card — o conteúdo vai direto para o composer |
+| segurar `Shift` ao colar | só esta colagem | sem mudar configuração. A próxima volta a ser interceptada |
+
+`alwaysRaw` é `false` por padrão, ou seja, exatamente o comportamento 0.1.27. É
+configuração comum (não volatile): decisão de implantação, não algo para alternar
+sem querer numa linha.
+
 ## Disciplina sugerida no AGENTS.md
 
 ```markdown

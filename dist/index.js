@@ -174,6 +174,11 @@ export const Config = z.object({
     // Automatic pruning of this plugin's own pastes, in days. 0 (the default) means
     // never delete: removing user files requires an explicit opt-in.
     retainDays: z.number().default(0),
+    // Kill switch: when true this plugin intercepts NOTHING — every paste goes
+    // straight into the composer, no file, no chip, no dock card. Deliberately NOT
+    // volatile: it is a deployment-wide decision, not a per-row toggle someone flips
+    // by accident. The one-off escape hatch is the Shift key (see client/index.ts).
+    alwaysRaw: z.boolean().default(false),
 });
 /**
  * Unwrap one config value as it stands right now.
@@ -644,6 +649,7 @@ class PasteStoreService extends TypertRemoteService {
             canConfigure: this.canConfigure(),
             chipBadge: this.flag(this.pluginConfig.chipBadge, CHIP_BADGE_DEFAULT),
             dock: this.flag(this.pluginConfig.dock, DOCK_DEFAULT),
+            alwaysRaw: this.flag(this.pluginConfig.alwaysRaw, false),
         };
     }
     /**

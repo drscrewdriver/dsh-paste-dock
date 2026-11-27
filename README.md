@@ -65,6 +65,17 @@ echo 'pastes/' >> .git/info/exclude
 # cordis.patch.yml → pasteDir: 'C:/temp/dsh-pastes'
 ```
 
+## 不拦截：强制原文出口(0.1.28 起)
+
+两个出口,互不依赖:
+
+| 方式 | 生效范围 | 怎么用 |
+| --- | --- | --- |
+| `alwaysRaw: true` | 全局,直到改回 `false` | `cordis.patch.yml` 里设 `alwaysRaw: true` 并重启 dsh。开启后**本插件不再拦截任何粘贴**:不落盘、不出 chip、不进 dock,内容原样进输入框 |
+| 按住 `Shift` 粘贴 | 仅这一次 | 不用改配置。松手后下一次粘贴恢复拦截 |
+
+`alwaysRaw` 默认 `false`,行为与 0.1.27 完全一致。它是普通配置项(非 volatile):这是部署级决定,不该被行内随手点开。
+
 ## 建议搭配 AGENTS.md 纪律
 
 ```markdown

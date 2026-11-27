@@ -89,12 +89,13 @@ export function applyRemoteConfig(remote: Record<string, unknown>, origin: strin
   // Anything but a real boolean keeps the previous value (the fallback above).
   if (typeof remote.chipBadge === 'boolean') shared.chipBadge = remote.chipBadge
   if (typeof remote.dock === 'boolean') shared.dockEnabled = remote.dock
+  if (typeof remote.alwaysRaw === 'boolean') shared.alwaysRaw = remote.alwaysRaw
   if (usable) {
     // Cache ONLY what the host confirmed: the Settings row's first paint reads
     // this, and an unusable payload must never become the row's remembered value.
     shared.configCache = remote
     console.log(
-      `[${PACKAGE}] config from ${origin}: minChars=${remote.minChars} (${remote.minCharsSource}), maxBytes=${remote.maxBytes}, chipBadge=${shared.chipBadge}, dock=${shared.dockEnabled}`,
+      `[${PACKAGE}] config from ${origin}: minChars=${remote.minChars} (${remote.minCharsSource}), maxBytes=${remote.maxBytes}, chipBadge=${shared.chipBadge}, dock=${shared.dockEnabled}, alwaysRaw=${shared.alwaysRaw}`,
     )
   }
   return usable

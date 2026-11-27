@@ -92,6 +92,25 @@ function apply(ctx: any): void {
   const onPaste = (event: ClipboardEvent): void => {
     const target = event.target
     if (!isComposerTarget(target)) return
+    // Two bypasses, deliberately BEFORE anything intercepts:
+    //   - alwaysRaw : the user told this plugin to stop intercepting entirely;
+    //   - Shift     : a one-off escape hatch, so "paste it raw just this once"
+    //                 does not require editing configuration and restarting.
+    // Both must be checked before preventDefault/stopImmediatePropagation, or the
+    // text is already ours and there is nothing left to "not intercept".
+    if (shared.alwaysRaw) {
+      console.log(`[${PACKAGE}] alwaysRaw is on — this paste is NOT intercepted`)
+      return
+    }
+    // `ClipboardEvent` inherits `Event` in the DOM types and therefore carries no
+    // `shiftKey`, but every shipping browser mirrors the modifier state onto the
+    // paste event (that is what "Shift+Insert" paste handlers read). Probed
+    // structurally: an absent field reads as "not held", which just means normal
+    // interception — the safe fallback.
+    if ((event as unknown as { shiftKey?: boolean }).shiftKey === true) {
+      console.log(`[${PACKAGE}] Shift held — this paste is NOT intercepted`)
+      return
+    }
     const clipboard = event.clipboardData
     if (!clipboard) return
     const text = clipboard.getData('text/plain')

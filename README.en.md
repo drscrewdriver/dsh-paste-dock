@@ -33,3 +33,16 @@ echo 'pastes/' >> .git/info/exclude
 # 3) point pasteDir outside the workspace
 # cordis.patch.yml → pasteDir: 'C:/temp/dsh-pastes'
 ```
+
+## Not intercepting: the raw-paste exits (since 0.1.28)
+
+Two independent exits:
+
+| How | Scope | Usage |
+| --- | --- | --- |
+| `alwaysRaw: true` | global until set back to `false` | set `alwaysRaw: true` in `cordis.patch.yml` and restart dsh. The plugin then intercepts **no** paste at all: no file, no chip, no dock card — the content goes straight into the composer |
+| hold `Shift` while pasting | this paste only | no config change. The next paste is intercepted again |
+
+`alwaysRaw` defaults to `false`, i.e. byte-for-byte the 0.1.27 behaviour. It is
+plain config (not volatile): a deployment decision, not something to flip by
+accident from a row.

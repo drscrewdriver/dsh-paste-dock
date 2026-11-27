@@ -103,6 +103,12 @@ export const shared = {
   chipBadge: DEFAULT_CHIP_BADGE,
   /** False: the dock slot renders nothing (saving itself is unaffected). */
   dockEnabled: DEFAULT_DOCK,
+  /**
+   * True: this plugin intercepts NOTHING. Every paste goes straight to the
+   * composer — no file, no chip, no card. The deliberate "leave me alone" switch
+   * (deployment-wide), plus Shift for a one-off (see client/index.ts onPaste).
+   */
+  alwaysRaw: false,
   /** The connection carrier, captured in apply(). */
   connection: null as { rpc?: unknown; isLoopback?: boolean; [key: string]: unknown } | null,
   /** The sessions runtime, captured in apply(). */

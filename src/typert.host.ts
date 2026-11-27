@@ -59,6 +59,8 @@ const getConfigResult$schema = z.object({
   // plain booleans on the wire, exactly like `canConfigure`.
   chipBadge: z.boolean(),
   dock: z.boolean(),
+  // Kill switch, same live-read rule as the display switches (see Config.alwaysRaw).
+  alwaysRaw: z.boolean(),
 })
 
 // One number, or null to clear the override and fall back to the deployment
