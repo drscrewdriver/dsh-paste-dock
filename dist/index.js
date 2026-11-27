@@ -384,6 +384,24 @@ export function isRegisteredWorkspace(dir, workspaces) {
     const target = norm(dir);
     return workspaces.some((workspace) => norm(workspace.path) === target);
 }
+/**
+ * Runtime guards for the two `savePaste` parameters. The wire validates its own
+ * callers, but this service is public: a direct (in-process) caller can hand it
+ * anything, and both values travel to a filesystem write — `sessionId` decides
+ * WHICH workspace directory the paste lands in.
+ *
+ * Extracted (and exported) so the refusal itself is testable: the service class
+ * needs a live cordis context to instantiate, which a unit test does not have.
+ */
+export function assertPasteCallArgs(text, sessionId) {
+    if (typeof text !== 'string') {
+        throw new Error(`pasteStore.savePaste: text must be a string (got ${typeof text})`);
+    }
+    // Same guard for the other parameter: the promise above is about BOTH.
+    if (typeof sessionId !== 'string') {
+        throw new Error(`pasteStore.savePaste: sessionId must be a string (got ${typeof sessionId})`);
+    }
+}
 /** Host service the web client calls via the connection RPC (`/api`). */
 class PasteStoreService extends TypertRemoteService {
     /**
@@ -523,12 +541,10 @@ class PasteStoreService extends TypertRemoteService {
     }
     /** Save one pasted text chunk into the session workspace's pastes/ dir. */
     async savePaste(text, sessionId) {
-        // Runtime guard: the wire validates its own callers, but this is a public
-        // service — a direct (in-process) caller can hand us anything, and the value
-        // would otherwise travel to a filesystem write. Refuse it by name.
-        if (typeof text !== 'string') {
-            throw new Error(`pasteStore.savePaste: text must be a string (got ${typeof text})`);
-        }
+        // Both parameters guarded before anything touches the filesystem — the doc
+        // promise is "refuses anything a direct caller hands it", and `sessionId`
+        // decides which workspace directory the paste lands in.
+        assertPasteCallArgs(text, sessionId);
         const dir = resolveWorkspaceDir(this.ctx, sessionId);
         if (dir === undefined)
             throw new Error('pasteStore: no workspace available to save the paste into');

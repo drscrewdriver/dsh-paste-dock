@@ -1089,9 +1089,14 @@ describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client h
     const src = readHost()
     const start = src.indexOf('async savePaste(')
     assert.ok(start >= 0, 'savePaste must exist')
-    const body = src.slice(start, start + 500)
-    assert.match(body, /typeof text !== 'string'/, 'a non-string text must be refused by name')
-    assert.match(body, /throw new Error/, 'and refused loudly, with a message')
+    const body = src.slice(start, start + 700)
+    // 0.1.23 moved the guards into assertPasteCallArgs (exported, so the refusal
+    // is behaviour-testable); the call site must still sit inside savePaste.
+    assert.match(body, /assertPasteCallArgs\(text, sessionId\)/, 'both parameters, one gate')
+    const guard = src.slice(src.indexOf('export function assertPasteCallArgs'))
+    assert.match(guard, /typeof text !== 'string'/, 'a non-string text must be refused by name')
+    assert.match(guard, /typeof sessionId !== 'string'/, 'and so must sessionId')
+    assert.match(guard, /throw new Error/, 'refused loudly, with a message')
   })
 
   // B3 — a toast timer firing after unload writes into a disposed plugin.
@@ -2102,5 +2107,48 @@ describe('V6 · 0.1.22 — both entry points use one ceiling (HD6)', () => {
     const body = src.slice(start, start + 200)
     assert.match(body, /return liveMaxBytesOf\(this\.pluginConfig\.maxBytes\)/)
     assert.doesNotMatch(body, /this\.knob\(/, 'the duplicate reading was the drift itself')
+  })
+})
+
+describe('V7 · 0.1.23 — savePaste guards every parameter (HD7)', () => {
+  // Imported dynamically so a missing export fails THESE assertions instead of
+  // aborting the whole test file at module load.
+  const guard = async () => {
+    const mod = await import('../dist/index.js')
+    assert.equal(typeof mod.assertPasteCallArgs, 'function', 'the guard must be exported')
+    return mod.assertPasteCallArgs
+  }
+
+  test('a non-string text is refused, by name', async () => {
+    const assertPasteCallArgs = await guard()
+    assert.throws(
+      () => assertPasteCallArgs(42, 'sid'),
+      (err) => err instanceof Error && /text must be a string/.test(err.message),
+    )
+  })
+
+  test('a non-string sessionId is refused too — it routes WHERE the paste lands', async () => {
+    const assertPasteCallArgs = await guard()
+    assert.throws(
+      () => assertPasteCallArgs('hello', 42),
+      (err) => err instanceof Error && /sessionId must be a string/.test(err.message),
+    )
+    assert.throws(
+      () => assertPasteCallArgs('hello', undefined),
+      (err) => err instanceof Error && /sessionId/.test(err.message),
+    )
+  })
+
+  test('a legitimate call passes', async () => {
+    const assertPasteCallArgs = await guard()
+    assert.doesNotThrow(() => assertPasteCallArgs('hello', 'sid-1'))
+  })
+
+  test('the guard runs BEFORE workspace resolution (source order)', () => {
+    const src = readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
+    const callAt = src.indexOf('assertPasteCallArgs(text, sessionId)')
+    const resolveAt = src.indexOf('const dir = resolveWorkspaceDir(this.ctx, sessionId)')
+    assert.ok(callAt > 0, 'the service must call the guard')
+    assert.ok(resolveAt > callAt, 'guarding after routing would be guarding too late')
   })
 })
