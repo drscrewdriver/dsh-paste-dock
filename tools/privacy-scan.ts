@@ -84,7 +84,7 @@ const PATTERNS: Array<[string, RegExp]> = [
  * the check for everything else.
  */
 const ALLOW = [
-  'C:/Users/someone', // tests/release.test.js placeholder for an absolute paste path
+  'C:/Users/someone', // tests/release.test.ts placeholder for an absolute paste path
   'C:\\Users\\someone',
 ]
 
