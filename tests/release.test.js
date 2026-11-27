@@ -1865,3 +1865,46 @@ describe('V1 · 0.1.17 — a saved paste is never re-inserted (D1)', () => {
     )
   })
 })
+
+describe('V2 · 0.1.18 — the serializer is bounded (D2)', () => {
+  const src = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'chip.ts'), 'utf8')
+  const sharedSrc = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'shared.ts'), 'utf8')
+
+  test('SERIALIZE_TIMEOUT_MS is exported and equals 5000', () => {
+    assert.match(
+      sharedSrc(),
+      /export const SERIALIZE_TIMEOUT_MS = 5000/,
+      'the bound must be a named export so tests can pin the value',
+    )
+    assert.match(
+      src(),
+      /import \{[^}]*SERIALIZE_TIMEOUT_MS[^}]*\} from '\.\/shared'/,
+      'chip.ts must consume the shared bound, not a local copy',
+    )
+  })
+
+  test('the abort timer is cleared in a finally (no leaked timer)', () => {
+    const body = src()
+    const start = body.indexOf('const bounds = new AbortController()')
+    assert.ok(start > 0, 'the bounded controller must exist')
+    const slice = body.slice(start, start + 700)
+    assert.match(slice, /setTimeout\(\(\) => bounds\.abort\(\), SERIALIZE_TIMEOUT_MS\)/)
+    assert.match(slice, /finally\s*\{[\s\S]*?clearTimeout\(timer\)/)
+  })
+
+  test('the never-aborted controller is gone', () => {
+    assert.doesNotMatch(
+      readClient(),
+      /new AbortController\(\)\.signal/,
+      'a signal from a controller nobody aborts is a timeout that never fires',
+    )
+  })
+
+  test('a timeout still leaves the user a visible reference (typeof early-return kept)', () => {
+    assert.match(
+      src(),
+      /if \(typeof modelText !== 'string'\) return false/,
+      'the non-string answer (aborted / unavailable) must fall through to the text path',
+    )
+  })
+})

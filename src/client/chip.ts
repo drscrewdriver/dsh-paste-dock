@@ -1,7 +1,7 @@
 // chip.ts — the saved-paste reference: the composer's own atomic chip, else
 // the text token. The chip payload, its serializer probe, and the ordinal
 // counter for multiple pastes all live here.
-import { PACKAGE, shared, type anyCtx } from './shared'
+import { PACKAGE, SERIALIZE_TIMEOUT_MS, shared, type anyCtx } from './shared'
 import { composerInsertion, inputForSession, needsBoundarySpace } from './composer'
 import { pastesOf } from './registry'
 import type { PasteEntry } from './shared'
@@ -124,8 +124,19 @@ export async function insertReferenceChip(
     // The submit path reads the same registry this asks, so a string answer is
     // the exact capability proof that sending will not throw later.
     const controller = ctx.get('inputTriggers')?.sessionOf?.(parts.scope)
-    const signal = new AbortController().signal
-    const modelText = await controller?.serializeReference?.('reference', chip.ref, signal)
+    // BOUNDED on purpose — see SERIALIZE_TIMEOUT_MS in shared.ts. The previous
+    // code took a signal off a controller nobody ever aborted, so a serializer
+    // that never settles hung the paste: preventDefault already ran, so the
+    // user would get no chip, no text and no message. Timing out makes the call
+    // throw/answer undefined, which lands on the plain-text path below.
+    const bounds = new AbortController()
+    const timer = setTimeout(() => bounds.abort(), SERIALIZE_TIMEOUT_MS)
+    let modelText: unknown
+    try {
+      modelText = await controller?.serializeReference?.('reference', chip.ref, bounds.signal)
+    } finally {
+      clearTimeout(timer)
+    }
     if (typeof modelText !== 'string') return false
     const composer = parts.input.for(parts.scope)
     // Put a real space into the draft when the caret follows a non-space (see

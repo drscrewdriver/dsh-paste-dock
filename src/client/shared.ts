@@ -19,6 +19,13 @@ export const DEFAULT_DOCK = true
 export const RPC_TIMEOUT_MS = 15000
 /** The startup config fetch is best-effort: never stall the listener. */
 export const CONFIG_TIMEOUT_MS = 5000
+/**
+ * Bound on the chip serializer. It sits ON the paste critical path: by the time
+ * we await it the caller has already called preventDefault, so a serializer that
+ * never settles leaves the user with no chip, no text and no message. Same order
+ * of magnitude as the two bounds above — it is a local call.
+ */
+export const SERIALIZE_TIMEOUT_MS = 5000
 
 /** One saved paste as the registry (and the dock) see it. */
 export interface PasteEntry {
