@@ -30,12 +30,12 @@ Publicado no npm, dá para `dsh plugin --profile <p> add dsh-paste-dock`. No Des
 
 ## Configuração (cordis.patch.yml, padrão da implantação; depois de mudar, reinicie o dsh, sem rebuild)
 
-| Campo | Padrão | Descrição |
-| --- | --- | --- |
-| `minChars` | 500 | limiar de colagem grande (UTF-16 code units). O usuário pode sobrepor em Settings → General (vale na hora) |
-| `maxBytes` | 1048576 | teto de bytes por colagem, imposto pelo host; teto duro 64 MiB |
-| `chipBadge` | `true` | o chip do rascunho aparece como selo mínimo; `false` volta ao label completo `nome do arquivo · N caracteres` |
-| `dock` | `true` | dock acima do campo de entrada; `false` não injeta o slot (salvar continua funcionando) |
+| Campo       | Padrão  | Descrição                                                                                                     |
+| ----------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `minChars`  | 500     | limiar de colagem grande (UTF-16 code units). O usuário pode sobrepor em Settings → General (vale na hora)    |
+| `maxBytes`  | 1048576 | teto de bytes por colagem, imposto pelo host; teto duro 64 MiB                                                |
+| `chipBadge` | `true`  | o chip do rascunho aparece como selo mínimo; `false` volta ao label completo `nome do arquivo · N caracteres` |
+| `dock`      | `true`  | dock acima do campo de entrada; `false` não injeta o slot (salvar continua funcionando)                       |
 
 O bundle do cliente não alcança row config; os valores acima chegam pela RPC `pasteStore/getConfig`, e os padrões locais são só fallback.
 
@@ -44,10 +44,10 @@ O bundle do cliente não alcança row config; os valores acima chegam pela RPC `
 O padrão continua sendo `pastes/` dentro do workspace — comportamento inalterado.
 Dois novos campos permitem movê-lo ou definir retenção:
 
-| Campo | Padrão | Significado |
-| --- | --- | --- |
-| `pasteDir` | `''` | vazio = `pastes/` no workspace; relativo = subdiretório do workspace (ex. `scratch/pastes`); absoluto = diretório fora dele (ex. `/tmp/dsh-pastes`). Um `..` é erro, nunca redirecionamento silencioso |
-| `retainDays` | `0` | janela de limpeza em dias. `0` = nunca apagar (padrão); teto 3650. Roda após uma gravação bem-sucedida |
+| Campo        | Padrão | Significado                                                                                                                                                                                            |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pasteDir`   | `''`   | vazio = `pastes/` no workspace; relativo = subdiretório do workspace (ex. `scratch/pastes`); absoluto = diretório fora dele (ex. `/tmp/dsh-pastes`). Um `..` é erro, nunca redirecionamento silencioso |
+| `retainDays` | `0`    | janela de limpeza em dias. `0` = nunca apagar (padrão); teto 3650. Roda após uma gravação bem-sucedida                                                                                                 |
 
 O escopo é estreito de propósito: **somente os pastes deste plugin**
 (`YYYYMMDD-HHMMSSmmm[-label].txt`), somente esse diretório (nunca recursivo); seus
@@ -74,10 +74,10 @@ echo 'pastes/' >> .git/info/exclude
 
 Duas saídas independentes:
 
-| Como | Escopo | Uso |
-| --- | --- | --- |
-| `alwaysRaw: true` | global até voltar a `false` | defina `alwaysRaw: true` em `cordis.patch.yml` e reinicie o dsh. O plugin passa a **não** interceptar nenhuma colagem: sem arquivo, sem chip, sem card — o conteúdo vai direto para o composer |
-| segurar `Shift` ao colar | só esta colagem | sem mudar configuração. A próxima volta a ser interceptada |
+| Como                     | Escopo                      | Uso                                                                                                                                                                                            |
+| ------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alwaysRaw: true`        | global até voltar a `false` | defina `alwaysRaw: true` em `cordis.patch.yml` e reinicie o dsh. O plugin passa a **não** interceptar nenhuma colagem: sem arquivo, sem chip, sem card — o conteúdo vai direto para o composer |
+| segurar `Shift` ao colar | só esta colagem             | sem mudar configuração. A próxima volta a ser interceptada                                                                                                                                     |
 
 `alwaysRaw` é `false` por padrão, ou seja, exatamente o comportamento 0.1.27. É
 configuração comum (não volatile): decisão de implantação, não algo para alternar
@@ -87,6 +87,7 @@ sem querer numa linha.
 
 ```markdown
 ## disciplina dsh-paste-dock
+
 Quando o usuário colar um bloco grande de texto (aprox. acima de 500 caracteres): se o hook do campo de entrada não interceptar, chame ativamente a ferramenta save_paste
 para guardar o texto em pastes/<timestamp>.txt e, na resposta, referencie o caminho relativo ao workspace — sem repetir o texto original.
 ```

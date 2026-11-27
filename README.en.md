@@ -8,10 +8,10 @@ See [README.md](README.md) (Chinese, canonical) and
 The default is still the workspace `pastes/` — behavior unchanged. Two new knobs
 let you move it or give it a retention window:
 
-| Field | Default | Meaning |
-| --- | --- | --- |
-| `pasteDir` | `''` | empty = workspace `pastes/`; relative = a subdirectory of the workspace (e.g. `scratch/pastes`); absolute = a directory outside it (e.g. `/tmp/dsh-pastes`). A `..` escape is an error, never a silent redirect |
-| `retainDays` | `0` | automatic cleanup window in days. `0` = never delete (default); ceiling 3650. Runs after a successful save |
+| Field        | Default | Meaning                                                                                                                                                                                                         |
+| ------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pasteDir`   | `''`    | empty = workspace `pastes/`; relative = a subdirectory of the workspace (e.g. `scratch/pastes`); absolute = a directory outside it (e.g. `/tmp/dsh-pastes`). A `..` escape is an error, never a silent redirect |
+| `retainDays` | `0`     | automatic cleanup window in days. `0` = never delete (default); ceiling 3650. Runs after a successful save                                                                                                      |
 
 The prune scope is deliberately narrow: **only this plugin's own**
 `YYYYMMDD-HHMMSSmmm[-label].txt`, only that one directory (never recursive); your
@@ -38,10 +38,10 @@ echo 'pastes/' >> .git/info/exclude
 
 Two independent exits:
 
-| How | Scope | Usage |
-| --- | --- | --- |
-| `alwaysRaw: true` | global until set back to `false` | set `alwaysRaw: true` in `cordis.patch.yml` and restart dsh. The plugin then intercepts **no** paste at all: no file, no chip, no dock card — the content goes straight into the composer |
-| hold `Shift` while pasting | this paste only | no config change. The next paste is intercepted again |
+| How                        | Scope                            | Usage                                                                                                                                                                                     |
+| -------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alwaysRaw: true`          | global until set back to `false` | set `alwaysRaw: true` in `cordis.patch.yml` and restart dsh. The plugin then intercepts **no** paste at all: no file, no chip, no dock card — the content goes straight into the composer |
+| hold `Shift` while pasting | this paste only                  | no config change. The next paste is intercepted again                                                                                                                                     |
 
 `alwaysRaw` defaults to `false`, i.e. byte-for-byte the 0.1.27 behaviour. It is
 plain config (not volatile): a deployment decision, not something to flip by
