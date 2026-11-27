@@ -100,14 +100,20 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ⑨ 发布（rc 版本→ --tag rc，不动 latest）
+      # ⑨ 发布（rc 版本→ --tag rc；正式版→ --tag next，**不自动改 latest**）
+      #
+      # 为什么正式版也发 next：本仓「先 next 观察 ≥3 天，人工带 2FA 转正 latest」
+      # 是写进 RELEASE.md 与 paste-dock-hardening 计划门禁的纪律。旧版这一支写的是
+      # --tag latest，等于每次推 tag 就直接上生产 —— 门禁项「latest 未被自动改写」
+      # 于是结构性不可满足（0.1.16 就是这样上去的）。转正仍需人工：
+      #     npm dist-tag add dsh-paste-dock@<ver> latest
       - name: npm publish
         if: steps.guard.outputs.exists == 'false' && (github.event_name == 'push' || inputs.dry_run == false)
         run: |
           set -euo pipefail
           case "$VERSION" in
             *-rc*) echo "::notice::rc 版本 $VERSION → 发到 rc 标签"; npm publish --provenance --access public --tag rc --registry https://registry.npmjs.org ;;
-            *)     npm publish --provenance --access public --tag latest --registry https://registry.npmjs.org ;;
+            *)     echo "::notice::正式版 $VERSION → 发到 next 标签（latest 由人工转正）"; npm publish --provenance --access public --tag next --registry https://registry.npmjs.org ;;
           esac
 
       # ⑩ dist-tag 同步（rc 线跳过，不动 dsh-* 线标签）
