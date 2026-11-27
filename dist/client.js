@@ -42,8 +42,13 @@ const DEFAULT_CHIP_BADGE = true;
 const DEFAULT_DOCK = true;
 /** RPC timeout: pastes must land quickly; failure falls back to raw text. */
 const RPC_TIMEOUT_MS = 15e3;
-/** The startup config fetch is best-effort: never stall the listener. */
-const CONFIG_TIMEOUT_MS = 5e3;
+/**
+* The startup config fetch is best-effort: never stall the listener. 8000 rather
+* than 5000 because a cold start plus the FIRST RPC of the session measured
+* uncomfortably close to 5s — at 5000 the Settings row regularly lost the race
+* and rendered its failure state on a perfectly healthy host.
+*/
+const CONFIG_TIMEOUT_MS = 8e3;
 /**
 * Bound on the chip serializer. It sits ON the paste critical path: by the time
 * we await it the caller has already called preventDefault, so a serializer that
@@ -71,7 +76,14 @@ const shared = {
 	/** The session identity the hint/slot latched (see composer.ts). */
 	slotSessionId: null,
 	/** The paired input actions latch (`{ sessionId, actions }`). */
-	slotInput: null
+	slotInput: null,
+	/**
+	* The last config payload the host CONFIRMED (written by rpc.applyRemoteConfig
+	* only when the payload was usable). The Settings row renders from this on its
+	* first paint, so a later failed re-read can never leave the row blank when a
+	* good value was already known.
+	*/
+	configCache: null
 };
 /** The platform seed word: react may be missing — everything degrades. */
 let React = null;
@@ -828,9 +840,14 @@ function mountPasteDock(ctx) {
 * is known, so the callers cannot drift apart; the endpoint stays a literal at
 * each call site, so the wire name is greppable where it is used.
 */
-async function callPasteStore(connection, endpoint, args, timeoutMs) {
+async function callPasteStore(connection, endpoint, args, timeoutMs, signal) {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	const relay = () => controller.abort();
+	if (signal !== void 0) {
+		if (signal.aborted) controller.abort();
+		else signal.addEventListener("abort", relay, { once: true });
+	}
 	try {
 		const result = await connection?.rpc?.call?.("/api", endpoint, { args }, controller.signal);
 		if (result && result.ok && result.value) return result.value;
@@ -838,6 +855,7 @@ async function callPasteStore(connection, endpoint, args, timeoutMs) {
 		throw new Error(`${endpoint} failed: ${detail}`);
 	} finally {
 		clearTimeout(timer);
+		signal?.removeEventListener("abort", relay);
 	}
 }
 /** Call the host pasteStore service over the existing connection RPC. */
@@ -853,8 +871,8 @@ function savePaste(connection, sessionId, text) {
 * at startup instead of at paste time; the listener always reads whichever
 * value is current.
 */
-function fetchHostConfig(connection) {
-	return callPasteStore(connection, "pasteStore/getConfig", {}, CONFIG_TIMEOUT_MS);
+function fetchHostConfig(connection, signal) {
+	return callPasteStore(connection, "pasteStore/getConfig", {}, CONFIG_TIMEOUT_MS, signal);
 }
 /**
 * Adopt a config payload from the host. Shared by the startup fetch and the
@@ -869,7 +887,10 @@ function applyRemoteConfig(remote, origin) {
 	} else console.warn(`[${PACKAGE}] ${origin} sent an unusable minChars (${JSON.stringify(remote.minChars)}) — keeping the ${shared.minChars}-char threshold`);
 	if (typeof remote.chipBadge === "boolean") shared.chipBadge = remote.chipBadge;
 	if (typeof remote.dock === "boolean") shared.dockEnabled = remote.dock;
-	if (usable) console.log(`[${PACKAGE}] config from ${origin}: minChars=${remote.minChars} (${remote.minCharsSource}), maxBytes=${remote.maxBytes}, chipBadge=${shared.chipBadge}, dock=${shared.dockEnabled}`);
+	if (usable) {
+		shared.configCache = remote;
+		console.log(`[${PACKAGE}] config from ${origin}: minChars=${remote.minChars} (${remote.minCharsSource}), maxBytes=${remote.maxBytes}, chipBadge=${shared.chipBadge}, dock=${shared.dockEnabled}`);
+	}
 	return usable;
 }
 
@@ -1260,33 +1281,76 @@ function thresholdHint(remote) {
 	if (remote.minCharsSource === "user") return `已自定义；部署默认值 ${remote.deploymentMinChars} 字符（cordis.patch.yml）`;
 	return "跟随 cordis.patch.yml 的部署默认值";
 }
+/**
+* Backoff between config read attempts. Why retry at all: the read used to be a
+* single request, and one timed-out fetch left `remote` null forever — the row
+* rendered "正在读取 host 配置…" with both controls disabled and no way back
+* short of unmounting the component (i.e. switching sessions). Two retries span
+* one DOM hiccup and one hot-reload window.
+*/
+const RETRY_DELAYS_MS = [1e3, 3e3];
+/**
+* Turn a raw rejection into something a user can act on. `AbortError` is OUR
+* timeout, not the user's fault and not a meaningful message — the DOMException
+* text ("signal is aborted without reason") used to be shown verbatim.
+*/
+function readableConfigError(reason) {
+	const name = reason?.name;
+	const message = reason instanceof Error ? reason.message : String(reason ?? "");
+	if (name === "AbortError" || /aborted|AbortError/i.test(message)) return "读取 host 配置超时（dsh 可能刚启动或正忙）——可点「重试」再读一次";
+	if (/connection 未就绪/.test(message)) return message;
+	return `读取 host 配置失败：${message || "未知错误"}`;
+}
 /** The preference row: current value, save, and reset back to the deployment default. */
 function SettingsMinCharsRow() {
-	const [remote, setRemote] = react.useState(null);
-	const [draft, setDraft] = react.useState("");
+	const [remote, setRemote] = react.useState(shared.configCache ?? null);
+	const [draft, setDraft] = react.useState(() => shared.configCache === null ? "" : String(shared.configCache.minChars));
 	const [note, setNote] = react.useState("");
 	const [busy, setBusy] = react.useState(false);
+	const [failed, setFailed] = react.useState(false);
+	const [attempt, retry] = react.useReducer((n) => n + 1, 0);
 	const adopt = react.useCallback((next, message) => {
 		setRemote(next);
 		setDraft(String(next.minChars));
 		setNote(message);
+		setFailed(false);
 		applyRemoteConfig(next, "settings");
 	}, []);
 	react.useEffect(() => {
-		let mounted = true;
 		if (shared.connection === null) {
 			setNote("connection 未就绪 —— 刷新页面后重试");
+			setFailed(true);
 			return;
 		}
-		fetchHostConfig(shared.connection).then((payload) => {
-			if (mounted) adopt(payload, "");
-		}).catch((reason) => {
-			if (mounted) setNote(`读取 host 配置失败：${reason.message}`);
-		});
-		return () => {
-			mounted = false;
+		const controller = new AbortController();
+		const retryTimers = [];
+		const cancelRetries = () => {
+			for (const timer of retryTimers) clearTimeout(timer);
+			retryTimers.length = 0;
 		};
-	}, [adopt]);
+		let cancelled = false;
+		const oneAttempt = (index) => {
+			fetchHostConfig(shared.connection, controller.signal).then((payload) => {
+				if (cancelled) return;
+				adopt(payload, "");
+			}).catch((reason) => {
+				if (cancelled) return;
+				if (index < RETRY_DELAYS_MS.length) {
+					retryTimers.push(setTimeout(() => oneAttempt(index + 1), RETRY_DELAYS_MS[index]));
+					setNote(`读取 host 配置失败，正在重试（${index + 1}/${RETRY_DELAYS_MS.length}）…`);
+					return;
+				}
+				setNote(readableConfigError(reason));
+				setFailed(true);
+			});
+		};
+		oneAttempt(0);
+		return () => {
+			cancelled = true;
+			cancelRetries();
+			controller.abort();
+		};
+	}, [adopt, attempt]);
 	const write = (value) => {
 		if (shared.connection === null) return;
 		setBusy(true);
@@ -1302,7 +1366,15 @@ function SettingsMinCharsRow() {
 		}
 		write(parsed);
 	};
-	return react.createElement("div", { className: "dsh-paste-dock-row" }, react.createElement("div", { className: "dsh-paste-dock-row-main" }, react.createElement("div", { className: "dsh-paste-dock-row-label" }, "大段粘贴阈值"), react.createElement("div", { className: "dsh-paste-dock-row-hint" }, `粘贴达到该字符数时保存为 pastes/ 附件，输入框里只留一行引用。${thresholdHint(remote)}`), note === "" ? null : react.createElement("div", { className: "dsh-paste-dock-row-note" }, note)), react.createElement("div", { className: "dsh-paste-dock-row-controls" }, react.createElement("input", {
+	return react.createElement("div", { className: "dsh-paste-dock-row" }, react.createElement("div", { className: "dsh-paste-dock-row-main" }, react.createElement("div", { className: "dsh-paste-dock-row-label" }, "大段粘贴阈值"), react.createElement("div", { className: "dsh-paste-dock-row-hint" }, `粘贴达到该字符数时保存为 pastes/ 附件，输入框里只留一行引用。${thresholdHint(remote)}`), note === "" ? null : react.createElement("div", { className: "dsh-paste-dock-row-note" }, note)), react.createElement("div", { className: "dsh-paste-dock-row-controls" }, failed ? react.createElement("button", {
+		type: "button",
+		className: "dsh-paste-dock-row-button",
+		onClick: () => {
+			setNote("");
+			setFailed(false);
+			retry();
+		}
+	}, "重试") : null, react.createElement("input", {
 		className: "dsh-paste-dock-row-input",
 		type: "number",
 		min: 1,

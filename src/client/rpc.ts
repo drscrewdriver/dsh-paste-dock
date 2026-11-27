@@ -13,9 +13,17 @@ export async function callPasteStore<T = Record<string, unknown>>(
   endpoint: string,
   args: Record<string, unknown>,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  // An OUTER abort (unmount, session switch) must win over the timeout too: the
+  // caller is going away, so waiting out the remaining seconds is pure latency.
+  const relay = () => controller.abort()
+  if (signal !== undefined) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', relay, { once: true })
+  }
   try {
     const conn = connection as { rpc?: { call?: Function } } | null
     const result = await conn?.rpc?.call?.('/api', endpoint, { args }, controller.signal)
@@ -25,6 +33,7 @@ export async function callPasteStore<T = Record<string, unknown>>(
     throw new Error(`${endpoint} failed: ${detail}`)
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener('abort', relay)
   }
 }
 
@@ -48,8 +57,11 @@ export function savePaste(
  * at startup instead of at paste time; the listener always reads whichever
  * value is current.
  */
-export function fetchHostConfig(connection: unknown): Promise<Record<string, unknown>> {
-  return callPasteStore(connection, 'pasteStore/getConfig', {}, CONFIG_TIMEOUT_MS)
+export function fetchHostConfig(
+  connection: unknown,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  return callPasteStore(connection, 'pasteStore/getConfig', {}, CONFIG_TIMEOUT_MS, signal)
 }
 
 /**
@@ -78,6 +90,9 @@ export function applyRemoteConfig(remote: Record<string, unknown>, origin: strin
   if (typeof remote.chipBadge === 'boolean') shared.chipBadge = remote.chipBadge
   if (typeof remote.dock === 'boolean') shared.dockEnabled = remote.dock
   if (usable) {
+    // Cache ONLY what the host confirmed: the Settings row's first paint reads
+    // this, and an unusable payload must never become the row's remembered value.
+    shared.configCache = remote
     console.log(
       `[${PACKAGE}] config from ${origin}: minChars=${remote.minChars} (${remote.minCharsSource}), maxBytes=${remote.maxBytes}, chipBadge=${shared.chipBadge}, dock=${shared.dockEnabled}`,
     )

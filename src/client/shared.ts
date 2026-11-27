@@ -17,8 +17,13 @@ export const DEFAULT_CHIP_BADGE = true
 export const DEFAULT_DOCK = true
 /** RPC timeout: pastes must land quickly; failure falls back to raw text. */
 export const RPC_TIMEOUT_MS = 15000
-/** The startup config fetch is best-effort: never stall the listener. */
-export const CONFIG_TIMEOUT_MS = 5000
+/**
+ * The startup config fetch is best-effort: never stall the listener. 8000 rather
+ * than 5000 because a cold start plus the FIRST RPC of the session measured
+ * uncomfortably close to 5s — at 5000 the Settings row regularly lost the race
+ * and rendered its failure state on a perfectly healthy host.
+ */
+export const CONFIG_TIMEOUT_MS = 8000
 /**
  * Bound on the chip serializer. It sits ON the paste critical path: by the time
  * we await it the caller has already called preventDefault, so a serializer that
@@ -112,6 +117,13 @@ export const shared = {
   slotSessionId: null as string | null,
   /** The paired input actions latch (`{ sessionId, actions }`). */
   slotInput: null as { sessionId: string; actions: any } | null,
+  /**
+   * The last config payload the host CONFIRMED (written by rpc.applyRemoteConfig
+   * only when the payload was usable). The Settings row renders from this on its
+   * first paint, so a later failed re-read can never leave the row blank when a
+   * good value was already known.
+   */
+  configCache: null as Record<string, unknown> | null,
 }
 
 /** The platform seed word: react may be missing — everything degrades. */

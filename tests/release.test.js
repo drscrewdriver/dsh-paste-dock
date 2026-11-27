@@ -2238,3 +2238,70 @@ describe('V9 · 0.1.25 — a silent chip failure leaves one clue (D3)', () => {
     assert.match(body(), /return miss\('/, 'every early exit still returns null')
   })
 })
+
+describe('V10 · 0.1.26 — the settings row survives a stalled read (#30)', () => {
+  const settingsSrc = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'settings.ts'), 'utf8')
+  const rpcSrc = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'rpc.ts'), 'utf8')
+  const sharedSrc = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'shared.ts'), 'utf8')
+
+  test('the config timeout is 8000ms (cold start + first RPC measured tight at 5000)', () => {
+    assert.match(sharedSrc(), /export const CONFIG_TIMEOUT_MS = 8000/)
+  })
+
+  test('retries are bounded and back off 1s then 3s', () => {
+    assert.match(settingsSrc(), /const RETRY_DELAYS_MS = \[1000, 3000\]/)
+    const src = settingsSrc()
+    assert.match(src, /if \(index < RETRY_DELAYS_MS\.length\)/, 'the retry chain must terminate')
+  })
+
+  test('an AbortError becomes readable Chinese, never "signal is aborted without reason"', () => {
+    const src = settingsSrc()
+    const start = src.indexOf('function readableConfigError')
+    assert.ok(start > 0, 'the translator must exist')
+    const body = src.slice(start, src.indexOf('/** The preference row', start))
+    assert.match(body, /name === 'AbortError'/, 'an abort is OUR timeout, not the user’s fault')
+    assert.match(body, /读取 host 配置超时/)
+    assert.doesNotMatch(
+      body,
+      /return `?[^`\n]*signal is aborted/,
+      'the raw DOMException text must never reach the user',
+    )
+  })
+
+  test('the first paint comes from the confirmed cache', () => {
+    const src = settingsSrc()
+    assert.match(src, /shared\.configCache as unknown as RemoteConfig \| null/, 'cached-first')
+    assert.match(rpcSrc(), /shared\.configCache = remote/, 'only a confirmed payload is cached')
+  })
+
+  test('unmount cancels retries AND the in-flight request; late answers are dropped', () => {
+    const src = settingsSrc()
+    const start = src.indexOf('React.useEffect(')
+    const body = src.slice(start, src.indexOf('}, [adopt, attempt])', start))
+    assert.match(body, /const cancelRetries = /, 'pending retry timers must be cancellable')
+    assert.match(body, /cancelRetries\(\)/, 'cleanup clears them')
+    assert.match(body, /controller\.abort\(\)/, 'cleanup aborts the in-flight read')
+    assert.match(body, /cancelled = true/, 'a late answer must not overwrite the next mount')
+    assert.match(rpcSrc(), /signal\.addEventListener\('abort', relay, \{ once: true \}\)/)
+  })
+
+  test('a failed read keeps the controls usable and offers a retry button', () => {
+    const src = settingsSrc()
+    assert.match(src, /'重试'/, 'the failure state must offer a way back')
+    assert.match(src, /retry\(\)/, 'and it reuses the same load path')
+    // The old wiring was `disabled: remote === null || busy` on every control, so a
+    // failed read (remote stays null) locked the field forever. Now the lock is
+    // `!editable || busy`, where editable no longer depends on a successful read.
+    assert.match(src, /const editable = remote !== null && remote\.canConfigure !== false/)
+    assert.doesNotMatch(
+      src,
+      /disabled: remote === null/,
+      'a failed READ must not disable the row: that is the #30 dead state',
+    )
+    assert.equal(
+      (src.match(/disabled: !editable \|\| busy/g) ?? []).length,
+      2,
+      'input + save still lock while a write is in flight',
+    )
+  })
+})

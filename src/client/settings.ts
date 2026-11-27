@@ -51,37 +51,96 @@ function thresholdHint(remote: RemoteConfig | null): string {
   return '跟随 cordis.patch.yml 的部署默认值'
 }
 
+/**
+ * Backoff between config read attempts. Why retry at all: the read used to be a
+ * single request, and one timed-out fetch left `remote` null forever — the row
+ * rendered "正在读取 host 配置…" with both controls disabled and no way back
+ * short of unmounting the component (i.e. switching sessions). Two retries span
+ * one DOM hiccup and one hot-reload window.
+ */
+const RETRY_DELAYS_MS = [1000, 3000]
+
+/**
+ * Turn a raw rejection into something a user can act on. `AbortError` is OUR
+ * timeout, not the user's fault and not a meaningful message — the DOMException
+ * text ("signal is aborted without reason") used to be shown verbatim.
+ */
+function readableConfigError(reason: unknown): string {
+  const name = (reason as { name?: unknown } | null)?.name
+  const message = reason instanceof Error ? reason.message : String(reason ?? '')
+  if (name === 'AbortError' || /aborted|AbortError/i.test(message)) {
+    return '读取 host 配置超时（dsh 可能刚启动或正忙）——可点「重试」再读一次'
+  }
+  if (/connection 未就绪/.test(message)) return message
+  return `读取 host 配置失败：${message || '未知错误'}`
+}
+
 /** The preference row: current value, save, and reset back to the deployment default. */
 function SettingsMinCharsRow() {
-  const [remote, setRemote] = React.useState<RemoteConfig | null>(null)
-  const [draft, setDraft] = React.useState('')
+  // Cached-first: a value the host already CONFIRMED paints immediately, so a
+  // failed re-read can never blank a row that was correct a moment ago.
+  const [remote, setRemote] = React.useState<RemoteConfig | null>(
+    (shared.configCache as unknown as RemoteConfig | null) ?? null,
+  )
+  const [draft, setDraft] = React.useState(() =>
+    shared.configCache === null ? '' : String(shared.configCache.minChars),
+  )
   const [note, setNote] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [failed, setFailed] = React.useState(false)
+  // Bumping this runs the load effect again — the same path as the first read,
+  // because a second, different code path would be a second thing to get wrong.
+  const [attempt, retry] = React.useReducer((n: number) => n + 1, 0)
 
   const adopt = React.useCallback((next: RemoteConfig, message: string) => {
     setRemote(next)
     setDraft(String(next.minChars))
     setNote(message)
+    setFailed(false)
     applyRemoteConfig(next as unknown as Record<string, unknown>, 'settings')
   }, [])
 
   React.useEffect(() => {
-    let mounted = true
     if (shared.connection === null) {
       setNote('connection 未就绪 —— 刷新页面后重试')
+      setFailed(true)
       return undefined
     }
-    fetchHostConfig(shared.connection)
-      .then((payload) => {
-        if (mounted) adopt(payload as unknown as RemoteConfig, '')
-      })
-      .catch((reason: Error) => {
-        if (mounted) setNote(`读取 host 配置失败：${reason.message}`)
-      })
-    return () => {
-      mounted = false
+    // Unmount / session switch cancels BOTH the in-flight request and any pending
+    // retry, so a late answer cannot overwrite the next mount's state.
+    const controller = new AbortController()
+    const retryTimers: Array<ReturnType<typeof setTimeout>> = []
+    const cancelRetries = (): void => {
+      for (const timer of retryTimers) clearTimeout(timer)
+      retryTimers.length = 0
     }
-  }, [adopt])
+    let cancelled = false
+
+    const oneAttempt = (index: number): void => {
+      fetchHostConfig(shared.connection, controller.signal)
+        .then((payload) => {
+          if (cancelled) return
+          adopt(payload as unknown as RemoteConfig, '')
+        })
+        .catch((reason: unknown) => {
+          if (cancelled) return
+          if (index < RETRY_DELAYS_MS.length) {
+            retryTimers.push(setTimeout(() => oneAttempt(index + 1), RETRY_DELAYS_MS[index]))
+            setNote(`读取 host 配置失败，正在重试（${index + 1}/${RETRY_DELAYS_MS.length}）…`)
+            return
+          }
+          setNote(readableConfigError(reason))
+          setFailed(true)
+        })
+    }
+    oneAttempt(0)
+
+    return () => {
+      cancelled = true
+      cancelRetries()
+      controller.abort()
+    }
+  }, [adopt, attempt])
 
   const write = (value: number | null): void => {
     if (shared.connection === null) return
@@ -93,6 +152,9 @@ function SettingsMinCharsRow() {
       .finally(() => setBusy(false))
   }
 
+  // The controls lock only while a WRITE is in flight. A failed READ must never
+  // disable them: the row was permanently dead after one timeout (#30), which is
+  // exactly what the retry button below exists to undo.
   const editable = remote !== null && remote.canConfigure !== false
   const submit = (): void => {
     const parsed = Number(draft)
@@ -122,6 +184,21 @@ function SettingsMinCharsRow() {
     React.createElement(
       'div',
       { className: 'dsh-paste-dock-row-controls' },
+      failed
+        ? React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: 'dsh-paste-dock-row-button',
+              onClick: () => {
+                setNote('')
+                setFailed(false)
+                retry()
+              },
+            },
+            '重试',
+          )
+        : null,
       React.createElement('input', {
         className: 'dsh-paste-dock-row-input',
         type: 'number',
