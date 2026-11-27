@@ -1800,3 +1800,68 @@ describe('paste dock — the fork contract (0.1.0)', () => {
     )
   })
 })
+
+describe('V1 · 0.1.17 — a saved paste is never re-inserted (D1)', () => {
+  // The chain from the save call to the line after both handlers: everything a
+  // "we lost your paste" decision could be made in.
+  const pasteChain = (src) => {
+    const start = src.indexOf('savePaste(connection, sessionId, text)')
+    assert.ok(start > 0, 'the paste chain must exist in src/client/index.ts')
+    const end = src.indexOf("document.addEventListener('paste'", start)
+    assert.ok(end > start, 'the chain must end before the listener is attached')
+    return src.slice(start, end)
+  }
+
+  test('the saved flag is set FIRST in the then-branch, before any toast', () => {
+    const chain = pasteChain(readClient())
+    const thenAt = chain.indexOf('.then(async (result) => {')
+    const savedAt = chain.indexOf('saved = { path: result.path, chars: result.chars }', thenAt)
+    const toastAt = chain.search(/safeToast\(|showToast\(/)
+    assert.ok(thenAt > 0, 'the success handler must exist')
+    assert.ok(savedAt > thenAt, 'the flag must be set inside the then-branch')
+    assert.ok(
+      toastAt > savedAt,
+      'the flag must be set before the first toast: a throwing toast must not look like a failed save',
+    )
+  })
+
+  test('the "already saved" catch branch never re-inserts the raw text', () => {
+    const chain = pasteChain(readClient())
+    const start = chain.indexOf('if (saved !== null) {')
+    assert.ok(start > 0, 'the saved-but-UI-failed branch must exist')
+    const end = chain.indexOf('// Never lose user data', start)
+    assert.ok(end > start, 'the branch must be delimited by the real-failure fallback')
+    const branch = chain.slice(start, end)
+    assert.doesNotMatch(
+      branch,
+      /insertTextAtCaret/,
+      'a saved paste must never be re-inserted: that leaves the chip AND the raw chunk',
+    )
+    assert.match(branch, /界面更新失败/, 'the branch reports what actually happened')
+  })
+
+  test('a genuine save failure still falls back to the raw text', () => {
+    const chain = pasteChain(readClient())
+    assert.match(
+      chain,
+      /insertTextAtCaret\(target as ComposerTarget, text\)/,
+      'the never-lose-data fallback must survive the saved-flag split',
+    )
+  })
+
+  test('the paste path only calls safeToast, never the throwing showToast', () => {
+    // Scoped to the paste handler's module: dock.ts keeps using showToast for its
+    // own click feedback, where a throw has nowhere else to land.
+    const src = readFileSync(join(PKG_ROOT, 'src', 'client', 'index.ts'), 'utf8')
+    assert.doesNotMatch(
+      src,
+      /\bshowToast\(/,
+      'showToast walks React subscribers; the paste handler must go through safeToast',
+    )
+    assert.match(
+      readFileSync(join(PKG_ROOT, 'src', 'client', 'toast.ts'), 'utf8'),
+      /export function safeToast\(/,
+      'safeToast itself must exist',
+    )
+  })
+})

@@ -17,7 +17,7 @@ import { mountPasteDock } from './dock'
 import { mountSettingsRow } from './settings'
 import { adoptBetterSidebar, mountSidebarHint, offerSidebarHint } from './hint'
 import { applyRemoteConfig, fetchHostConfig, savePaste } from './rpc'
-import { clearToastTimers, mountToastSurface, showToast } from './toast'
+import { clearToastTimers, mountToastSurface, safeToast } from './toast'
 
 /** The module-table id and console prefix (dsh.client platform: web). */
 const name = PACKAGE
@@ -117,8 +117,17 @@ function apply(ctx: any): void {
     event.preventDefault()
     event.stopImmediatePropagation()
 
+    // The saved paste, once the host confirmed it. This distinguishes "the save
+    // failed" (fall back to raw text — never lose data) from "the save
+    // succeeded but a later UI step threw" — the latter must NEVER re-insert the
+    // text: that leaves the chip AND the whole raw chunk in the composer at
+    // once, exactly the shape this plugin exists to prevent.
+    let saved: { path: string; chars: number } | null = null
     savePaste(connection, sessionId, text)
       .then(async (result) => {
+        // FIRST statement, before any surface that can throw: from here on the
+        // bytes are on disk and "we lost your paste" would be a lie.
+        saved = { path: result.path, chars: result.chars }
         // The head-of-text preview rides the registry (dock card) and the chip
         // label — the recognition two pastes need to tell each other apart.
         // Display only; never enters the mention or the file.
@@ -131,7 +140,7 @@ function apply(ctx: any): void {
           console.log(
             `[${PACKAGE}] saved paste (${result.chars} chars) -> ${result.path} as an atomic reference chip`,
           )
-          showToast(`已保存为 ${result.path}（${result.chars} 字符）`)
+          safeToast(`已保存为 ${result.path}（${result.chars} 字符）`)
           offerSidebarHint()
           return
         }
@@ -140,14 +149,27 @@ function apply(ctx: any): void {
         const ref = pasteReference(result.path, result.chars)
         insertTextAtCaret(target as ComposerTarget, ref)
         console.log(`[${PACKAGE}] saved paste (${result.chars} chars) -> ${result.path}`)
-        showToast(`已保存为 ${result.path}（${result.chars} 字符）`)
+        safeToast(`已保存为 ${result.path}（${result.chars} 字符）`)
       })
       .catch((error: unknown) => {
+        // The save itself worked; a UI step after it threw. Report the file
+        // that exists — and deliberately do NOT touch the composer.
+        if (saved !== null) {
+          console.error(
+            `[${PACKAGE}] paste saved to ${saved.path}, but updating the composer failed:`,
+            error,
+          )
+          safeToast(
+            `已保存为 ${saved.path}（${saved.chars} 字符），但界面更新失败——文件在，可从侧栏打开`,
+            'error',
+          )
+          return
+        }
         // Never lose user data: on failure insert the original text — and
         // report what actually happened, rather than assuming it worked.
         console.error(`[${PACKAGE}] paste save failed, falling back to raw text:`, error)
         const inserted = insertTextAtCaret(target as ComposerTarget, text)
-        showToast(
+        safeToast(
           inserted
             ? '大段粘贴保存失败，已按原样粘贴回输入框'
             : '大段粘贴保存失败，也没能自动插回输入框——内容还在剪贴板，请手动 Ctrl+V 重试',

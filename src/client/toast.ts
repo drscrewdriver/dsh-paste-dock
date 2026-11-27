@@ -43,6 +43,21 @@ export function showToast(text: string, level?: string): void {
   toastTimers.add(timer)
 }
 
+/**
+ * A toast must never take the paste path down with it: `showToast` walks the
+ * React listeners (`publishToasts`), so one throwing subscriber propagates out
+ * of the caller — and in the paste handler the caller is the `.then` of a save
+ * that ALREADY wrote the file (see client/index.ts). There the thrown toast
+ * would land in the `.catch` meant for save failures.
+ */
+export function safeToast(text: string, level?: string): void {
+  try {
+    showToast(text, level)
+  } catch (error) {
+    console.error(`[${PACKAGE}] toast surface threw; the paste itself is unaffected:`, error)
+  }
+}
+
 /** Cancel every pending auto-dismiss (unload hygiene — see index.ts). */
 export function clearToastTimers(): void {
   for (const timer of toastTimers) clearTimeout(timer)

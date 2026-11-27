@@ -1,6 +1,6 @@
 # CODE-METRICS.md — dsh-paste-dock 代码度量报告（防屎山 P2）
 
-> 生成命令：`npm run metrics`（node tools/metrics.mjs）；生成时间：2026-11-05T06:26:29.440Z
+> 生成命令：`npm run metrics`（node tools/metrics.mjs）；生成时间：2026-11-27T13:37:10.033Z
 > 度量对象：`src/**/*.js`（web client 半身）+ `scripts/**/*.mjs` + `smoke.mjs`；`src/*.ts` 由 tsc 守门、`tests/` 自证、构建产物不度量。
 > 阈值：圈复杂度 ≤10、认知复杂度 ≤15（超限 = 红名单，metrics exit 1）。
 
@@ -20,7 +20,7 @@
 | scripts/test-host-compatibility.mjs | stopProcess | 184 | 9 | 11 |
 | scripts/test-host-compatibility.mjs | findNpm | 122 | 8 | 13 |
 | scripts/release.mjs | sh | 72 | 6 | 6 |
-| scripts/hosts.mjs | assertHostPeers | 41 | 5 | 5 |
+| scripts/hosts.mjs | assertHostPeers | 48 | 5 | 5 |
 | smoke.mjs | refuses | 58 | 4 | 4 |
 | scripts/test-host-compatibility.mjs | pinHostDependencies | 107 | 3 | 4 |
 | scripts/release.mjs | incVersion | 226 | 3 | 2 |
@@ -33,7 +33,7 @@
 | scripts/test-host-compatibility.mjs | observe | 345 | 2 | 1 |
 | scripts/test-host-compatibility.mjs | (anonymous) | 431 | 2 | 1 |
 | smoke.mjs | get | 46 | 2 | 1 |
-| scripts/hosts.mjs | (anonymous) | 42 | 1 | 0 |
+| scripts/hosts.mjs | (anonymous) | 49 | 1 | 0 |
 | scripts/release.mjs | (anonymous) | 52 | 1 | 0 |
 | scripts/release.mjs | log | 65 | 1 | 0 |
 | scripts/release.mjs | ok | 66 | 1 | 0 |
