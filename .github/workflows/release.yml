@@ -1,7 +1,7 @@
 name: release
 
 # 变体：dsh-paste-dock 手写（不走模板渲染）
-# 原因：privacy-scan 必须在 install 前、build 是复合命令、smoke.mjs 非 npm run、
+# 原因：privacy-scan 必须在 install 前、build 是复合命令、smoke.ts 非 npm run、
 #       artifact check 在 build 之后 lint 之前（与模板"gate 后统一 artifact"不同序）
 # 必须包含：id-token: write + --provenance --access public
 
@@ -83,7 +83,7 @@ jobs:
 
       # ⑥ Smoke
       - name: Smoke
-        run: node smoke.mjs
+        run: node smoke.ts
 
       # ⑦ 打包清单
       - name: 打包清单

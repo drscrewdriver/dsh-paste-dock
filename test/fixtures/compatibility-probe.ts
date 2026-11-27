@@ -1,14 +1,35 @@
-// 隔离兼容探针:仅由 scripts/test-host-compatibility.mjs 经 --patch 挂载。
+// 隔离兼容探针:仅由 scripts/test-host-compatibility.ts 经 --patch 挂载。
 // webServer 是唯一硬注入(所有已验证宿主线都有);其余服务全部运行时探测,
 // 缺席记为 false/'unknown' 而不是让探针挂载失败——矩阵要区分
 // "宿主没有该服务"和"探针自身起不来"这两种完全不同的结论。
+//
+// 类型面只在本仓受 tsc 检查；宿主机看到的永远是
+// scripts/test-host-compatibility.ts 用 typescript API 剥完类型后的 JS。
+//
+// 探针里全部宿主服务都只能按存在性用（逐线能力不同），所以这一面
+// 故意是开放的：任何具体化都会把"未验证的宿主属性"伪造成编译期保证。
+type Loose = Record<string, any>
+
+/** 探针回读的 payload；字段逐线可缺，故全部可选。 */
+interface WorkspaceRow {
+  sessionIds: string[]
+  path?: string
+}
+interface ProbeResponse {
+  writeHead: (status: number, headers?: Record<string, string>) => void
+  end: (body?: string) => void
+}
+
 export const inject = ['webServer']
 
-const msg = (error) => String((error && (error.message || error.stack)) || error)
+const msg = (error: unknown): string => {
+  const e = error as { message?: string; stack?: string } | null
+  return String((e && (e.message || e.stack)) || error)
+}
 
-export function apply(ctx) {
+export function apply(ctx: Loose): void {
   // 服务取出:先 ctx.get(字符串键,cordis Service 以名为键注册),再退属性访问。
-  const pick = (...keys) => {
+  const pick = (...keys: string[]): any => {
     for (const key of keys) {
       try {
         const value = typeof ctx.get === 'function' ? ctx.get(key) : undefined
@@ -25,8 +46,11 @@ export function apply(ctx) {
     ctx.webServer.register({
       kind: 'prefix',
       path: '/__paste-dock-compat',
-      async handler(_req, res) {
-        const out = { pid: process.pid, checks: {} }
+      async handler(_req: unknown, res: ProbeResponse) {
+        const out: { pid: number; checks: Record<string, unknown> } = {
+          pid: process.pid,
+          checks: {},
+        }
         const c = out.checks
         try {
           // 1. pasteStore 服务(插件宿主半身的唯一 Service)。
@@ -106,7 +130,7 @@ export function apply(ctx) {
               const registry = pick('workspaceRegistry')
               c.workspaceRegistryKeys =
                 registry && typeof registry === 'object' ? Object.keys(registry) : String(registry)
-              const list = () =>
+              const list = (): WorkspaceRow[] | undefined =>
                 typeof registry?.list === 'function' ? registry.list() : undefined
               c.workspaceList = (() => {
                 try {

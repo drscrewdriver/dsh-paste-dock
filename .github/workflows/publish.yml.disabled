@@ -66,7 +66,7 @@ jobs:
           pnpm run format:check
           pnpm run metrics
           pnpm test
-          node smoke.mjs
+          node smoke.ts
 
       - name: Build artifacts must match sources (dist/ + lib/)
         run: git diff --exit-code -- dist lib

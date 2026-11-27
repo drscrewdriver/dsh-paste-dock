@@ -24,7 +24,7 @@
 在插件目录执行：
 1. `npm run typecheck` → exit 0
 2. `npm run build` → exit 0，dist/ 更新
-3. `node smoke.mjs` → 输出 SMOKE-OK
+3. `node smoke.ts` → 输出 SMOKE-OK
 4. `npm test` → 全部 pass（应有 18 项；沙箱拦子进程时加 `--test-isolation=none`）
 任一步失败即 bug，记录错误信息。
 

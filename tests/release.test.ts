@@ -1141,8 +1141,8 @@ describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client h
 
   // B4 — the smoke test only ever looked at invocations[0], so a broken
   // getConfig/setMinChars descriptor would have passed it.
-  test('smoke.mjs walks EVERY typert invocation and uses the OS temp area', () => {
-    const src = readSrc('smoke.mjs')
+  test('smoke.ts walks EVERY typert invocation and uses the OS temp area', () => {
+    const src = readSrc('smoke.ts')
     assert.match(
       src,
       /for \(const inv of TYPERT\.invocations\)/,
