@@ -282,9 +282,22 @@ type SettingsPathOpLike =
  * Calling without the probe is a hard TypeError on 0.1.7 — measured, and it took
  * the whole web-client config path down with it.
  */
+/**
+ * One row of `settings.describe()` — the 0.1.7+ projection of a plugin's Config.
+ * `user` is the RAW USER SECTION: a field's presence there marks it
+ * user-overridden, and this is the ONLY way 0.1.7 exposes the user layer.
+ */
+interface SettingsDescriptorLike {
+  ns: string
+  /** Raw user section, when one exists. Absent (not empty) when the user never wrote. */
+  user?: unknown
+}
+
 interface SettingsServiceLike {
   register?(ns: string, schema: unknown, options?: { applies?: 'live' | 'restart' }): unknown
   get?(ns: string): unknown
+  /** 0.1.7+ only: every namespace this plugin declares, with its raw user section. */
+  describe?(): SettingsDescriptorLike[]
   /** 0.1.7 only: per-instance settings-page policy (declining the generated page). */
   configure?(presentation: { auto?: boolean }, owner?: unknown): () => void
   update(ns: string, patch: Record<string, unknown>): Promise<void>
@@ -304,11 +317,23 @@ export function readSettings(
   service: SettingsServiceLike | undefined,
   ns: string,
 ): Record<string, unknown> | undefined {
-  if (service === undefined || typeof service.get !== 'function') return undefined
-  const value = service.get(ns)
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined
+  if (service === undefined) return undefined
+  // TWO LINES, TWO READ PATHS (measured: 0.1.5-rc.x vs 0.1.7-rc.2):
+  //   0.1.5 keeps get(ns);  0.1.7 deleted it and projects the user's override
+  //   into descriptor.user. Probing only `get` left the 0.1.7 path unreachable,
+  //   so the effective threshold silently reported 'deployment' even right after
+  //   a successful save (the value was right, the label was a lie).
+  if (typeof service.get === 'function') {
+    const value = service.get(ns)
+    if (typeof value === 'object' && value !== null) return value as Record<string, unknown>
+  }
+  if (typeof service.describe === 'function') {
+    const rows = service.describe()
+    const row = Array.isArray(rows) ? rows.find((candidate) => candidate?.ns === ns) : undefined
+    const user = row?.user
+    if (typeof user === 'object' && user !== null) return user as Record<string, unknown>
+  }
+  return undefined
 }
 
 /**
@@ -608,19 +633,25 @@ class PasteStoreService extends TypertRemoteService {
    * Whether the user can store a preference from the UI — this is what the General
    * row renders as an editable field.
    *
-   * A WRITE PATH, not a service: the service's mere presence once made the row
-   * promise a save that could never be read back. Which write path counts differs
-   * by line —
-   *   - 0.1.5 keeps the user's value and reads it back with `get`, closing the loop;
-   *   - 0.1.7 has no `get` at all: the field is written into this plugin's own
-   *     Config, and that write only lands because the field is declared volatile.
-   * Anything else (no provider, no `update`, a line whose schema cannot be marked
-   * volatile) leaves the row in its honest "edit cordis.patch.yml" state.
+   * A READABLE user layer, not just a write path: the service's mere presence once
+   * made the row promise a save whose value the plugin could never read back.
+   * Which read path counts differs by line —
+   *   - 0.1.5 keeps the user's value and reads it back with `get`, closing the
+   *     loop, and needs NO volatile field (dsh keeps the value in its own
+   *     settings document);
+   *   - 0.1.7+ reads it back with `describe().user`, and can only WRITE because
+   *     the field is declared volatile.
+   * Requiring `volatile` on both lines would silently disable the row on 0.1.5,
+   * where `.volatile()` does not exist at all (see schemaVolatileCapable) — that
+   * would be a regression, not a hardening. Anything else (no provider, no
+   * `update`, neither read path) leaves the row in its honest "edit
+   * cordis.patch.yml" state.
    */
   private canConfigure(): boolean {
     const settings = this.settings()
     if (typeof settings?.update !== 'function') return false
-    return typeof settings.get === 'function' || schemaVolatileCapable
+    if (typeof settings.get === 'function') return true
+    return typeof settings.describe === 'function' && schemaVolatileCapable
   }
 
   /** Build the wire payload the browser reads (and re-reads after every write). */

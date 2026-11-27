@@ -1325,18 +1325,34 @@ describe('settings capability probes — dsh 0.1.7 dropped get/register (2026-09
       'and that one call site sits inside the probe',
     )
     assert.match(src, /service\.get\(ns\)/, 'readSettings owns the single get call')
+    // Re-specified in 0.1.20 (HD4): probing ONLY get left the 0.1.7 read path
+    // unreachable, so the row reported 'deployment' right after a user save.
+    // Both read paths must now be probed, and both inside a typeof guard.
     assert.match(
       src,
+      /if \(typeof service\.get === 'function'\) \{/,
+      'the get path is probed, never assumed',
+    )
+    assert.match(
+      src,
+      /if \(typeof service\.describe === 'function'\) \{/,
+      'the 0.1.7 describe().user path must be reachable too',
+    )
+    assert.doesNotMatch(
+      src,
       /if \(service === undefined \|\| typeof service\.get !== 'function'\) return undefined/,
-      'guarded before it is called',
+      'the get-only early return is exactly the HD4 defect: it makes describe() dead code',
     )
   })
 
-  // Re-specified 2026-09-29 (the user chose the full 0.1.7 adaptation): the row is
-  // editable whenever a WRITE PATH exists. 0.1.5 closes the loop with get(); 0.1.7
-  // has no get at all and writes into this plugin's own volatile field instead.
+  // Re-specified 2026-09-29 (the user chose the full 0.1.7 adaptation), then
+  // RE-specified again in 0.1.20 (HD4): the row is editable when a READABLE user
+  // layer exists, not merely when a write path does. 0.1.5 closes the loop with
+  // get() and needs no volatile field (its schemastery has no .volatile() at
+  // all); 0.1.7+ closes it with describe().user, which only exists because the
+  // field is volatile. Requiring volatile on both lines would disable 0.1.5.
   // The service's presence still proves nothing on either line.
-  test('canConfigure needs a working write path, and names which one', () => {
+  test('canConfigure requires a readable user layer, per line', () => {
     const src = readHost()
     assert.match(
       src,
@@ -1345,8 +1361,13 @@ describe('settings capability probes — dsh 0.1.7 dropped get/register (2026-09
     )
     assert.match(
       src,
-      /return typeof settings\.get === 'function' \|\| schemaVolatileCapable/,
-      '0.1.5 proves the loop with get; 0.1.7 with a volatile field',
+      /if \(typeof settings\.get === 'function'\) return true/,
+      '0.1.5 proves the loop with get — and must stay editable',
+    )
+    assert.match(
+      src,
+      /return typeof settings\.describe === 'function' && schemaVolatileCapable/,
+      '0.1.7+ needs BOTH a read path and a volatile field to write it',
     )
     assert.doesNotMatch(
       src,
@@ -1955,5 +1976,52 @@ describe('V3 · 0.1.19 — name collisions are bounded (HD8)', () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('V4 · 0.1.20 — the settings row reports honestly (HD4)', () => {
+  const settingsService = (impl) => ({
+    update: async () => {},
+    mutate: async () => {},
+    ...impl,
+  })
+
+  test('describe-only service (0.1.7 shape) is READ: the user section comes back', () => {
+    const service = settingsService({
+      describe: () => [
+        { ns: 'other', user: { minChars: 111 } },
+        { ns: PASTE_SETTINGS_NAMESPACE, user: { minChars: 777 } },
+      ],
+    })
+    assert.deepEqual(readSettings(service, PASTE_SETTINGS_NAMESPACE), { minChars: 777 })
+  })
+
+  test('when both lines are readable, get() wins', () => {
+    const service = settingsService({
+      get: () => ({ minChars: 111 }),
+      describe: () => [{ ns: PASTE_SETTINGS_NAMESPACE, user: { minChars: 777 } }],
+    })
+    assert.deepEqual(readSettings(service, PASTE_SETTINGS_NAMESPACE), { minChars: 111 })
+  })
+
+  test('a describe() row for another namespace is not mistaken for ours', () => {
+    const service = settingsService({ describe: () => [{ ns: 'other', user: { minChars: 1 } }] })
+    assert.equal(readSettings(service, PASTE_SETTINGS_NAMESPACE), undefined)
+  })
+
+  test('a service with neither read path answers undefined instead of throwing', () => {
+    assert.equal(readSettings(settingsService({}), PASTE_SETTINGS_NAMESPACE), undefined)
+    assert.equal(readSettings(undefined, PASTE_SETTINGS_NAMESPACE), undefined)
+  })
+
+  test('canConfigure keeps the 0.1.5 line editable (get present ⇒ true)', () => {
+    // Source-level guard: the deviation from the competitor's
+    // `readable && schemaVolatileCapable` is deliberate (0.1.5 has no volatile()),
+    // so a future "align with upstream" pass must fail here, not in the field.
+    const src = readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
+    const start = src.indexOf('private canConfigure()')
+    const body = src.slice(start, start + 900)
+    assert.match(body, /typeof settings\.get === 'function'\) return true/)
+    assert.match(body, /typeof settings\.describe === 'function' && schemaVolatileCapable/)
   })
 })
