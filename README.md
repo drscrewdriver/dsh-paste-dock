@@ -96,9 +96,9 @@ echo 'pastes/' >> .git/info/exclude
 
 ```sh
 pnpm install            # 或 npx pnpm@10 install --frozen-lockfile
-npm run build:all       # tsc(宿主) + tsdown(client 单 bundle)→ dist/,同步 lib/(双份入库)
-npm test                # node --test(112 项:宿主单测 + 客户端源级契约守卫)
-npm run typecheck       # 宿主 + 客户端两套 tsconfig 严格检查
+npm run build:all       # tsc(宿主) + tsdown(client 单 bundle)→ dist/(唯一入库产物)
+npm test                # node --test(162 项:宿主单测 + 客户端源级契约守卫)
+npm run typecheck       # 宿主 + 客户端 + 工具链三套 tsconfig 严格检查
 npm run lint && npm run format:check && npm run privacy && npm run metrics
 ```
 

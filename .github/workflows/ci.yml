@@ -11,8 +11,11 @@
 #   - 依赖用 pnpm（仓库有 pnpm-lock.yaml）。`pnpm-workspace.yaml` 的 minimumReleaseAgeExclude
 #     是 0.1.5-rc.1 这批「刚发布」的包过 minimumReleaseAge 供应链策略所必需，随仓库提交。
 #   - `metrics` 是硬门禁：超限函数数 > 0 或存在解析失败文件即 exit 1（见 tools/metrics.ts）。
-#   - 产物一致性：dist/ 与 lib/ 是入库产物（dsh loader 读 dist/，super-injector 读 lib/），
+#   - 产物一致性：dist/ 是入库产物（dsh loader 按 package.json 的 main/exports 读 dist/），
 #     构建后必须与源码一致——`git diff --exit-code` 非零即视为「产物落后于源码」。
+#     0.2.0-rc.5 取消了 `lib/` 镜像：npm tarball 从来不含它（files 未列入），四个真装机
+#     目录都只有 dist/，唯一声称消费它的 dsh-super-injector 在本机无任何存迹。
+#     证据与回滚方式：.agents/plans/paste-dock-ts-rewrite/findings.md。
 name: ci
 
 on:
@@ -63,8 +66,8 @@ jobs:
       - name: Build (host + client)
         run: pnpm run build && pnpm run build:client
 
-      - name: Build artifacts must match sources (dist/ + lib/)
-        run: git diff --exit-code -- dist lib
+      - name: Build artifacts must match sources (dist/)
+        run: git diff --exit-code -- dist
 
       - name: Lint (ESLint)
         run: pnpm run lint

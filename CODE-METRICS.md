@@ -1,12 +1,12 @@
 # CODE-METRICS.md — dsh-paste-dock 代码度量报告（防屎山 P2）
 
-> 生成命令：`npm run metrics`（node tools/metrics.ts）；生成时间：2026-11-27T18:11:57.456Z
+> 生成命令：`npm run metrics`（node tools/metrics.ts）；生成时间：2026-11-27T18:17:18.687Z
 > 度量对象：`scripts/**/*.ts` + `smoke.ts`；`src/*.ts` 由 tsc 守门、`tests/` 自证、构建产物不度量。解析器 = typescript 编译器 API（espree 不吃类型注解）。
 > 阈值：圈复杂度 ≤10、认知复杂度 ≤15（超限 = 红名单，metrics exit 1）。
 
 ## 1. 总览
 
-- 度量文件数：6；函数总数：59；**超限函数数：0**
+- 度量文件数：5；函数总数：59；**超限函数数：0**
 - 圈复杂度最高：10；认知复杂度最高：13
 
 ## 2. 超限红名单（重构/拆分优先级）

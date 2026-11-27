@@ -103,9 +103,9 @@ para guardar o texto em pastes/<timestamp>.txt e, na resposta, referencie o cami
 
 ```sh
 pnpm install            # ou npx pnpm@10 install --frozen-lockfile
-npm run build:all       # tsc (host) + tsdown (bundle único do client) → dist/, sincroniza lib/ (cópia dupla no repositório)
-npm test                # node --test (112 itens: unit do host + guardas de contrato em nível de fonte do cliente)
-npm run typecheck       # verificação estrita dos dois tsconfig (host + cliente)
+npm run build:all       # tsc (host) + tsdown (bundle único do client) → dist/ (único artefato versionado)
+npm test                # node --test (162 itens: unit do host + guardas de contrato em nível de fonte do cliente)
+npm run typecheck       # verificação estrita dos três tsconfig (host + cliente + ferramental)
 npm run lint && npm run format:check && npm run privacy && npm run metrics
 ```
 
