@@ -29,7 +29,12 @@ const ROW_CSS = [
 interface RemoteConfig {
   minChars: number
   maxBytes?: number
-  minCharsSource?: string
+  /**
+   * Narrowed to the host's own union (index.ts `PasteStoreConfig`). The wire
+   * schema is `z.enum(['user','deployment'])` (typert.host.ts), so anything else
+   * is rejected at the boundary rather than silently reading as 'deployment'.
+   */
+  minCharsSource?: 'user' | 'deployment'
   deploymentMinChars?: number
   canConfigure?: boolean
 }

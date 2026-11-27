@@ -373,8 +373,8 @@ describe('static regression guards — past bugs must not resurrect', () => {
     assert.match(src, /minChars: z\.number\(\)/)
     assert.match(
       src,
-      /minCharsSource: z\.string\(\)/,
-      'getConfig must report where the effective value came from',
+      /minCharsSource: z\.enum\(\['user', 'deployment'\]\)/,
+      'getConfig must report where the effective value came from — as the union it is',
     )
     assert.match(
       src,
@@ -2023,5 +2023,42 @@ describe('V4 · 0.1.20 — the settings row reports honestly (HD4)', () => {
     const body = src.slice(start, start + 900)
     assert.match(body, /typeof settings\.get === 'function'\) return true/)
     assert.match(body, /typeof settings\.describe === 'function' && schemaVolatileCapable/)
+  })
+})
+
+describe('V5 · 0.1.21 — the wire contract keeps the union (HD5)', () => {
+  const typert = () => readFileSync(join(PKG_ROOT, 'src', 'typert.host.ts'), 'utf8')
+  const clientSettings = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'settings.ts'), 'utf8')
+
+  test('the host schema declares an enum, not a bare string', () => {
+    const src = typert()
+    assert.match(
+      src,
+      /minCharsSource: z\.enum\(\['user', 'deployment'\]\)/,
+      'z.string() let the union evaporate at the wire boundary',
+    )
+    assert.doesNotMatch(src, /minCharsSource: z\.string\(\)/)
+  })
+
+  test('an out-of-union value is rejected at the boundary, in-union values pass', async () => {
+    const { z } = await import('zod')
+    const schema = z.enum(['user', 'deployment'])
+    assert.equal(schema.parse('user'), 'user')
+    assert.equal(schema.parse('deployment'), 'deployment')
+    assert.throws(() => schema.parse('foo'), 'a degraded contract would accept this silently')
+  })
+
+  test('the client type is narrowed to the same union', () => {
+    assert.match(
+      clientSettings(),
+      /minCharsSource\?: 'user' \| 'deployment'/,
+      'the client half must share the host union, or the two branches are unreachable',
+    )
+  })
+
+  test('both branches of thresholdHint stay reachable', () => {
+    const src = clientSettings()
+    assert.match(src, /remote\.minCharsSource === 'user'/, 'the user branch')
+    assert.match(src, /跟随 cordis\.patch\.yml 的部署默认值/, 'the deployment branch')
   })
 })
