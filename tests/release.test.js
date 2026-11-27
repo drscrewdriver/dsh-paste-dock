@@ -2062,3 +2062,45 @@ describe('V5 · 0.1.21 — the wire contract keeps the union (HD5)', () => {
     assert.match(src, /跟随 cordis\.patch\.yml 的部署默认值/, 'the deployment branch')
   })
 })
+
+describe('V6 · 0.1.22 — both entry points use one ceiling (HD6)', () => {
+  const indexSrc = () => readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
+
+  test('liveMaxBytesOf resolves every shape, defaulting on unreadable input', async () => {
+    const { liveMaxBytesOf, MAX_PASTE_BYTES } = await import('../dist/index.js')
+    assert.equal(liveMaxBytesOf(undefined), MAX_PASTE_BYTES)
+    assert.equal(liveMaxBytesOf(1024), 1024)
+    assert.equal(liveMaxBytesOf(-1), MAX_PASTE_BYTES, 'invalid ⇒ the documented default, never 0')
+    assert.equal(liveMaxBytesOf('nonsense'), MAX_PASTE_BYTES)
+    assert.equal(
+      liveMaxBytesOf({ get: () => 2048 }),
+      2048,
+      'the 0.1.7 live box must be read, not treated as an object',
+    )
+  })
+
+  test('the tool slice passes liveMaxBytesOf(config.maxBytes), not a boot snapshot', () => {
+    const src = indexSrc()
+    const toolAt = src.indexOf("name: 'save_paste'")
+    assert.ok(toolAt > 0, 'the tool declaration must exist')
+    const body = src.slice(toolAt)
+    assert.match(
+      body,
+      /liveMaxBytesOf\(config\.maxBytes\)/,
+      'a config write must apply to the very next tool call, with no restart',
+    )
+    assert.doesNotMatch(
+      body,
+      /savePasteTo\(dir, args\.text, new Date\(\), maxBytes/,
+      'the boot-time local is exactly the stale snapshot HD6 describes',
+    )
+  })
+
+  test('the service reads the same authority (no second implementation)', () => {
+    const src = indexSrc()
+    const start = src.indexOf('private maxBytes()')
+    const body = src.slice(start, start + 200)
+    assert.match(body, /return liveMaxBytesOf\(this\.pluginConfig\.maxBytes\)/)
+    assert.doesNotMatch(body, /this\.knob\(/, 'the duplicate reading was the drift itself')
+  })
+})

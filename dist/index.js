@@ -85,6 +85,21 @@ export function resolveMaxBytes(raw) {
     return raw;
 }
 /**
+ * The byte ceiling as configured RIGHT NOW, with the hard default on an
+ * unreadable value. BOTH entry points funnel through this — the RPC service and
+ * the model-facing `save_paste` tool — because two independent readings of one
+ * knob is how they drift apart (the tool used to pass its boot snapshot, so a
+ * config write applied to one path and not the other).
+ */
+export function liveMaxBytesOf(raw) {
+    try {
+        return resolveMaxBytes(readLiveValue(raw));
+    }
+    catch {
+        return MAX_PASTE_BYTES;
+    }
+}
+/**
  * Resolve one configured boolean flag (`chipBadge`, `dock`): `undefined` falls
  * back to the default, anything else must be exactly `true` or `false`. Throws
  * on violation so the caller decides — the service's flag wrapper catches and
@@ -404,7 +419,7 @@ class PasteStoreService extends TypertRemoteService {
     }
     /** The byte ceiling for one paste, as configured right now. */
     maxBytes() {
-        return this.knob(this.pluginConfig.maxBytes, resolveMaxBytes, MAX_PASTE_BYTES);
+        return liveMaxBytesOf(this.pluginConfig.maxBytes);
     }
     /**
      * One boolean switch for THIS call, falling back to its documented default.
@@ -529,10 +544,10 @@ export function apply(ctx, config = {}) {
     // default, so a typo in the row config stays visible instead of taking the
     // plugin down. Same shape for both knobs.
     //
-    // These two locals are the BOOT-TIME REPORT only (this log line, the tool
-    // description below). What the service enforces is re-read from `config` on every
-    // call — see PasteStoreService.knob — because on 0.1.7 a Settings write lands in
-    // that same config while dsh keeps running.
+    // These locals are the BOOT-TIME REPORT only (this log line). What is ENFORCED
+    // is re-read from `config` on every call — both by PasteStoreService (see
+    // liveMaxBytesOf / knob) and by the save_paste tool — because on 0.1.7 a
+    // Settings write lands in that same config while dsh keeps running.
     let minChars = MIN_CHARS_DEFAULT;
     try {
         minChars = resolveMinChars(readLiveValue(config.minChars));
@@ -630,7 +645,10 @@ export function apply(ctx, config = {}) {
                 // Folder name only — same privacy rule as workspaceRefusal above.
                 throw new Error(`save_paste: refusing to write outside a registered workspace (${basename(dir)})`);
             }
-            return publicPasteRef(await savePasteTo(dir, args.text, new Date(), maxBytes, args.label));
+            // Re-read HERE instead of reusing the boot-time snapshot: a config/settings
+            // write lands in this same object while dsh keeps running, and the tool must
+            // enforce exactly what the service enforces. Same authority (liveMaxBytesOf).
+            return publicPasteRef(await savePasteTo(dir, args.text, new Date(), liveMaxBytesOf(config.maxBytes), args.label));
         },
     }));
     // Self-check (spike-proven): confirm the tool actually landed in the registry.
