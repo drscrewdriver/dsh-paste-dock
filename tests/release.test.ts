@@ -643,9 +643,9 @@ describe('savePasteTo — concurrent same-timestamp saves (atomic, no TOCTOU)', 
           contents.length,
           `round ${round}: every concurrent save must own a distinct file`,
         )
-        for (let i = 0; i < contents.length; i += 1) {
+        for (const [i, row] of results.entries()) {
           assert.equal(
-            await readFile(join(dir, results[i].path), 'utf8'),
+            await readFile(join(dir, row.path), 'utf8'),
             contents[i],
             `round ${round} content ${i}`,
           )
@@ -2253,7 +2253,7 @@ describe('V9 · 0.1.25 — a silent chip failure leaves one clue (D3)', () => {
   }
 
   test('the four miss reasons are distinct and each names its own cause', () => {
-    const reasons = [...body().matchAll(/miss\('([^']+)'\)/g)].map((m) => m[1])
+    const reasons = [...body().matchAll(/miss\('([^']+)'\)/g)].map((m) => m[1] ?? '')
     assert.equal(reasons.length, 4, 'one reason per null path')
     assert.equal(new Set(reasons).size, 4, 'two paths sharing a reason is as blind as silence')
     for (const reason of reasons) {

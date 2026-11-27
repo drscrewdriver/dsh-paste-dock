@@ -4,6 +4,11 @@
   // 这些文件由 Node 22 的原生类型剥离直跑（`node tools/x.ts`），没有构建步骤，
   // 所以相对导入必须写真实扩展名 `.ts`（类型剥离不做 .js→.ts 映射）。
   // 代价写进约束：禁用 enum / namespace / 参数属性 / 旧式装饰器——它们需要 emit 才能落地。
+  //
+  // 严格度开关（rc.4）：下面三件全开且零错。**没开** noPropertyAccessFromIndexSignature：
+  // 实测 client 与 tools 各报 27 条，host 为 0——它要求把 `record.path` 改写成
+  // `record["path"]`，而这两个面恰恰靠索引签名描述逐宿主可缺的能力（探针/测试夹具）。
+  // 强制括号访问只会把可读的形状判断换成一片噪声，不收。
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2022", "dom", "dom.iterable"],
@@ -11,6 +16,10 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
     "strict": true,
+    // 与 tsconfig.json / tsconfig.client.json 同源的 rc.4 严格度三件，三份必须同步改。
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "allowJs": true,

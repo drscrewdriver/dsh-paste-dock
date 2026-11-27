@@ -157,7 +157,7 @@ function checkIdentity(tmp: string): IdentityResult {
   const domains = new Set<string>()
   for (const line of readFileSync(out, 'utf8').split('\n')) {
     if (line.trim() === '') continue
-    const [sha, author, committer] = line.split('|')
+    const [sha = '', author, committer] = line.split('|')
     checked += 1
     for (const [role, value] of [
       ['author', author],
@@ -246,10 +246,10 @@ function checkPackage(): string[] {
       continue // binary or unreadable: not a text leak surface
     }
     const lines = text.split('\n')
-    for (let i = 0; i < lines.length; i += 1) {
-      if (allowed(lines[i])) continue
+    for (const [i, line] of lines.entries()) {
+      if (allowed(line)) continue
       for (const [category, re] of PATTERNS) {
-        if (re.test(lines[i])) note('package', category, `${rel}:${i + 1}`, 'value withheld')
+        if (re.test(line)) note('package', category, `${rel}:${i + 1}`, 'value withheld')
       }
     }
   }

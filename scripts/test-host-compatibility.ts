@@ -30,9 +30,7 @@ import ts from 'typescript'
 import { supportedHosts, peerRange } from './hosts.ts'
 
 const firstLine = (error: unknown): string =>
-  String((error as Error | null)?.message || error)
-    .split('\n')[0]
-    .slice(0, 200)
+  (String((error as Error | null)?.message || error).split('\n')[0] ?? '').slice(0, 200)
 
 const args = process.argv.slice(2)
 const keep = args.includes('--keep')
@@ -72,7 +70,8 @@ if (list.length > 1) {
   )
   process.exit(failed.length ? 1 : 0)
 }
-const [version] = list
+const version = list[0]
+assert(version !== undefined, 'list 为空 —— supportedHosts 一个都没有，矩阵无从跑起')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
 const peerNames = Object.keys(manifest.peerDependencies).filter((name) =>
@@ -80,8 +79,8 @@ const peerNames = Object.keys(manifest.peerDependencies).filter((name) =>
 )
 
 function cordisPin(hostVersion: string): string {
-  const [triplet] = hostVersion.split('-')
-  const [maj, min, patch] = triplet.split('.').map(Number)
+  const [triplet = ''] = hostVersion.split('-')
+  const [maj = 0, min = 0, patch = 0] = triplet.split('.').map(Number)
   return [maj, min, patch] >= [0, 1, 7] ? '4.0.4' : '4.0.2'
 }
 const CORDIS_PLUGIN_PINS: Record<string, Record<string, string>> = {

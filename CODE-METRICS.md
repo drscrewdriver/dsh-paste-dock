@@ -1,6 +1,6 @@
 # CODE-METRICS.md — dsh-paste-dock 代码度量报告（防屎山 P2）
 
-> 生成命令：`npm run metrics`（node tools/metrics.ts）；生成时间：2026-11-27T18:08:23.069Z
+> 生成命令：`npm run metrics`（node tools/metrics.ts）；生成时间：2026-11-27T18:11:57.456Z
 > 度量对象：`scripts/**/*.ts` + `smoke.ts`；`src/*.ts` 由 tsc 守门、`tests/` 自证、构建产物不度量。解析器 = typescript 编译器 API（espree 不吃类型注解）。
 > 阈值：圈复杂度 ≤10、认知复杂度 ≤15（超限 = 红名单，metrics exit 1）。
 
@@ -17,22 +17,22 @@
 
 | 文件 | 函数 | 行 | 圈复杂度 | 认知复杂度 |
 |---|---|---|---|---|
-| scripts/test-host-compatibility.ts | stopProcess | 196 | 10 | 12 |
-| scripts/test-host-compatibility.ts | findNpm | 128 | 8 | 13 |
+| scripts/test-host-compatibility.ts | stopProcess | 195 | 10 | 12 |
+| scripts/test-host-compatibility.ts | findNpm | 127 | 8 | 13 |
 | scripts/release.ts | sh | 87 | 6 | 6 |
 | scripts/hosts.ts | assertHostPeers | 48 | 5 | 5 |
 | smoke.ts | refuses | 60 | 4 | 4 |
-| scripts/test-host-compatibility.ts | pinHostDependencies | 112 | 3 | 4 |
+| scripts/test-host-compatibility.ts | pinHostDependencies | 111 | 3 | 4 |
 | scripts/release.ts | errText | 79 | 3 | 2 |
 | scripts/release.ts | incVersion | 241 | 3 | 2 |
-| scripts/test-host-compatibility.ts | (anonymous) | 52 | 3 | 2 |
-| scripts/test-host-compatibility.ts | (anonymous) | 118 | 3 | 2 |
+| scripts/test-host-compatibility.ts | firstLine | 32 | 3 | 2 |
+| scripts/test-host-compatibility.ts | (anonymous) | 50 | 3 | 2 |
+| scripts/test-host-compatibility.ts | (anonymous) | 117 | 3 | 2 |
 | scripts/release.ts | gitOk | 103 | 2 | 1 |
-| scripts/test-host-compatibility.ts | firstLine | 32 | 2 | 1 |
-| scripts/test-host-compatibility.ts | cordisPin | 82 | 2 | 1 |
-| scripts/test-host-compatibility.ts | (anonymous) | 186 | 2 | 1 |
-| scripts/test-host-compatibility.ts | observe | 412 | 2 | 1 |
-| scripts/test-host-compatibility.ts | (anonymous) | 498 | 2 | 1 |
+| scripts/test-host-compatibility.ts | cordisPin | 81 | 2 | 1 |
+| scripts/test-host-compatibility.ts | (anonymous) | 185 | 2 | 1 |
+| scripts/test-host-compatibility.ts | observe | 411 | 2 | 1 |
+| scripts/test-host-compatibility.ts | (anonymous) | 497 | 2 | 1 |
 | smoke.ts | get | 48 | 2 | 1 |
 | scripts/hosts.ts | (anonymous) | 49 | 1 | 0 |
 | scripts/release.ts | (anonymous) | 54 | 1 | 0 |
@@ -43,31 +43,31 @@
 | scripts/release.ts | (anonymous) | 321 | 1 | 0 |
 | scripts/sync-hosts.ts | (anonymous) | 27 | 1 | 0 |
 | scripts/sync-hosts.ts | (anonymous) | 63 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 40 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 78 | 1 | 0 |
-| scripts/test-host-compatibility.ts | hostCordisOverrides | 103 | 1 | 0 |
-| scripts/test-host-compatibility.ts | run | 162 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 168 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 38 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 77 | 1 | 0 |
+| scripts/test-host-compatibility.ts | hostCordisOverrides | 102 | 1 | 0 |
+| scripts/test-host-compatibility.ts | run | 161 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 167 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 175 | 1 | 0 |
 | scripts/test-host-compatibility.ts | (anonymous) | 176 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 177 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 179 | 1 | 0 |
 | scripts/test-host-compatibility.ts | (anonymous) | 180 | 1 | 0 |
 | scripts/test-host-compatibility.ts | (anonymous) | 181 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 182 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 200 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 205 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 209 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 213 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 227 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 229 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 289 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 300 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 407 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 409 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 422 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 426 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 444 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 542 | 1 | 0 |
-| scripts/test-host-compatibility.ts | (anonymous) | 551 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 199 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 204 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 208 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 212 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 226 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 228 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 288 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 299 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 406 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 408 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 421 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 425 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 443 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 541 | 1 | 0 |
+| scripts/test-host-compatibility.ts | (anonymous) | 550 | 1 | 0 |
 | smoke.ts | fail | 12 | 1 | 0 |
 | smoke.ts | list | 51 | 1 | 0 |
 | smoke.ts | (anonymous) | 71 | 1 | 0 |
