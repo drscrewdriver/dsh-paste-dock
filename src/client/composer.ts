@@ -1,6 +1,6 @@
 // composer.ts — the composer surface: paste-target detection, caret insertion,
 // the slot latches, and the facade walk that resolves one session's input.
-import { shared, type ComposerTarget, type InputFacade, type anyCtx } from './shared'
+import { PACKAGE, shared, type ComposerTarget, type InputFacade, type anyCtx } from './shared'
 
 /**
  * Is this paste target the dsh composer surface?
@@ -123,17 +123,37 @@ export function currentSessionId(): string | null {
 }
 
 /**
+ * One-shot latch for the "no chip today" warning: a chip that quietly stopped
+ * working must leave ONE clue — zero is undebuggable, one per paste is a flood.
+ */
+let insertionMissWarned = false
+
+/**
  * Resolve the composer's insertion parts for one session, or null when any of
  * them is missing. The session PAIRING is checked first: actions latched from
  * another session can never address this one's composer.
+ *
+ * Every null below is "no chip today" for a DIFFERENT reason, and the fallback
+ * (a plain-text reference) is safe — but it used to happen in total silence, so
+ * a deployment where the chip never worked looked identical to one that chose
+ * text. Report the first reason once; the null contract is unchanged.
  */
 export function composerInsertion(ctx: anyCtx, sessionId: string) {
-  if (shared.slotInput === null) return null
-  if (shared.slotInput.sessionId !== sessionId) return null
+  const miss = (why: string): null => {
+    if (!insertionMissWarned) {
+      insertionMissWarned = true
+      console.warn(
+        `[${PACKAGE}] atomic reference chip unavailable — ${why}; falling back to a plain-text reference`,
+      )
+    }
+    return null
+  }
+  if (shared.slotInput === null) return miss('the composer input slot is not mounted')
+  if (shared.slotInput.sessionId !== sessionId) return miss('another session owns this composer')
   const input = ctx.get('conversation')?.input
-  if (!input) return null
+  if (!input) return miss('the conversation.input facade is unavailable')
   const scope = (shared.sessions as any)?.scope?.(sessionId)
-  if (!scope) return null
+  if (!scope) return miss('no session scope for this session id')
   return { input, scope, actions: shared.slotInput.actions }
 }
 

@@ -2201,3 +2201,40 @@ describe('V8 · 0.1.24 — workspace identity ignores spelling (HD9)', () => {
     )
   })
 })
+
+describe('V9 · 0.1.25 — a silent chip failure leaves one clue (D3)', () => {
+  const composerSrc = () => readFileSync(join(PKG_ROOT, 'src', 'client', 'composer.ts'), 'utf8')
+  const body = () => {
+    const src = composerSrc()
+    const start = src.indexOf('export function composerInsertion')
+    assert.ok(start > 0, 'composerInsertion must exist')
+    return src.slice(start)
+  }
+
+  test('the four miss reasons are distinct and each names its own cause', () => {
+    const reasons = [...body().matchAll(/miss\('([^']+)'\)/g)].map((m) => m[1])
+    assert.equal(reasons.length, 4, 'one reason per null path')
+    assert.equal(new Set(reasons).size, 4, 'two paths sharing a reason is as blind as silence')
+    for (const reason of reasons) {
+      assert.ok(reason.length > 12, `"${reason}" must be readable, not a code`)
+    }
+  })
+
+  test('the latch is read and then set before warn — exactly one line per process', () => {
+    const fn = body()
+    const latchAt = fn.indexOf('if (!insertionMissWarned) {')
+    const setAt = fn.indexOf('insertionMissWarned = true')
+    const warnAt = fn.indexOf('console.warn(')
+    assert.ok(latchAt > 0 && setAt > latchAt && warnAt > setAt, 'latched before it prints')
+    assert.match(
+      composerSrc(),
+      /let insertionMissWarned = false/,
+      'the latch starts clear, at module scope (one line per process)',
+    )
+  })
+
+  test('the null contract is unchanged (miss() answers null)', () => {
+    assert.match(body(), /const miss = \(why: string\): null => \{/)
+    assert.match(body(), /return miss\('/, 'every early exit still returns null')
+  })
+})
