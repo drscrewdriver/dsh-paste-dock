@@ -1908,3 +1908,52 @@ describe('V2 · 0.1.18 — the serializer is bounded (D2)', () => {
     )
   })
 })
+
+describe('V3 · 0.1.19 — name collisions are bounded (HD8)', () => {
+  test('MAX_COLLISION_ATTEMPTS is exported and is a positive integer', async () => {
+    const mod = await import('../dist/index.js')
+    assert.ok(Number.isInteger(mod.MAX_COLLISION_ATTEMPTS))
+    assert.ok(mod.MAX_COLLISION_ATTEMPTS > 0, 'a zero/negative cap would refuse every paste')
+  })
+
+  test('a directory full of squatters rejects instead of hanging', async () => {
+    const dir = await tmpDir()
+    try {
+      const now = new Date(2026, 7, 15, 20, 30, 6, 123)
+      const { MAX_COLLISION_ATTEMPTS } = await import('../dist/index.js')
+      const rel = pasteFilename(now)
+      const stem = rel.replace(/\.txt$/, '')
+      mkdirSync(join(dir, 'pastes'), { recursive: true })
+      // Occupy every name the loop can produce: base, -1 … -(cap-1).
+      for (let n = 0; n < MAX_COLLISION_ATTEMPTS; n += 1) {
+        const name = n === 0 ? rel : `${stem}-${n}.txt`
+        writeFileSync(join(dir, 'pastes', name), 'squatter')
+      }
+      const started = Date.now()
+      await assert.rejects(
+        () => savePasteTo(dir, 'new paste', now),
+        /gave up after \d+ name collisions/,
+        'an exhausted name space must be an error, never a silent hang',
+      )
+      const elapsed = Date.now() - started
+      assert.ok(elapsed < 30000, `the bounded loop must fail fast (took ${elapsed}ms)`)
+      // Nothing was overwritten on the way out.
+      assert.equal(readFileSync(join(dir, 'pastes', rel), 'utf8'), 'squatter')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('an empty directory still writes, and collisions still bump the suffix', async () => {
+    const dir = await tmpDir()
+    try {
+      const now = new Date(2026, 7, 15, 20, 30, 6, 123)
+      const r1 = await savePasteTo(dir, 'first', now)
+      const r2 = await savePasteTo(dir, 'second', now)
+      assert.match(r1.path, /^pastes\/\d{8}-\d{6}\d{3}\.txt$/)
+      assert.match(r2.path, /-1\.txt$/, 'the second save still bumps instead of overwriting')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})

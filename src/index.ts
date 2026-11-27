@@ -379,6 +379,13 @@ export function assertPasteSize(text: string, maxBytes: number = MAX_PASTE_BYTES
 }
 
 /**
+ * How many `-n` suffixes to try before a name collision becomes an error the
+ * caller can report. Generous enough that no honest workload reaches it, finite
+ * so that a directory full of squatting names cannot turn a paste into a hang.
+ */
+export const MAX_COLLISION_ATTEMPTS = 1000
+
+/**
  * Write one paste under `<workspaceDir>/pastes/<timestamp>[-<label>].txt`.
  * Pure standalone function — unit-testable without a booted harness.
  * Same-second collisions append `-<n>` AFTER the label (see the loop below).
@@ -400,8 +407,12 @@ export async function savePasteTo(
   // Atomic exclusive create: EEXIST means another writer (concurrent
   // same-timestamp save, or an existing file) claimed this name first —
   // bump the -n suffix and retry. No check-then-write race window.
-  let target = base
-  for (let n = 0; ; n += 1) {
+  //
+  // BOUNDED on purpose: the loop used to be `for (let n = 0; ; n += 1)`, so a
+  // directory full of squatters turned every paste into a silent hang. A named
+  // cap converts "never finishes" into an error the user can act on.
+  let target: string | undefined
+  for (let n = 0; n < MAX_COLLISION_ATTEMPTS; n += 1) {
     const candidate =
       n === 0 ? base : join(workspaceDir, 'pastes', `${basename(rel, '.txt')}-${n}.txt`)
     try {
@@ -411,6 +422,12 @@ export async function savePasteTo(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
     }
+  }
+  if (target === undefined) {
+    throw new Error(
+      `paste: gave up after ${MAX_COLLISION_ATTEMPTS} name collisions for ${rel}; ` +
+        'remove or rename the squatters under pastes/ and retry',
+    )
   }
   return {
     path: relative(workspaceDir, target).split('\\').join('/'),
