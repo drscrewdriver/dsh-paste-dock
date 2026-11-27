@@ -4,7 +4,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { readFileSync, mkdirSync, writeFileSync, cpSync, rmSync, mkdtempSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -2150,5 +2150,54 @@ describe('V7 · 0.1.23 — savePaste guards every parameter (HD7)', () => {
     const resolveAt = src.indexOf('const dir = resolveWorkspaceDir(this.ctx, sessionId)')
     assert.ok(callAt > 0, 'the service must call the guard')
     assert.ok(resolveAt > callAt, 'guarding after routing would be guarding too late')
+  })
+})
+
+describe('V8 · 0.1.24 — workspace identity ignores spelling (HD9)', () => {
+  const ws = { path: join(tmpdir(), 'ws-root'), sessionIds: ['s1'] }
+
+  test('every equivalent spelling of a registered path is accepted', () => {
+    const spellings = [
+      ws.path,
+      join(ws.path, '.'),
+      `${ws.path}//`,
+      `${ws.path}${sep}sub${sep}..`,
+      `${ws.path}/`,
+    ]
+    for (const spelling of spellings) {
+      assert.equal(
+        isRegisteredWorkspace(spelling, [ws]),
+        true,
+        `${spelling} names the same directory as ${ws.path}`,
+      )
+    }
+  })
+
+  test('a genuinely different path is still refused', () => {
+    const outside = join(ws.path, '..', 'other')
+    assert.equal(isRegisteredWorkspace(outside, [ws]), false)
+    assert.equal(isRegisteredWorkspace(join(ws.path, 'nested'), [ws]), false)
+  })
+
+  test('case folding still applies where the platform folds it', () => {
+    const upper = ws.path.toUpperCase()
+    const accepted = isRegisteredWorkspace(upper, [ws])
+    assert.equal(
+      accepted,
+      process.platform === 'win32',
+      'win32 accepts the folded spelling; a case-sensitive fs must not',
+    )
+  })
+
+  test('normalize() is used, and realpath is deliberately not', () => {
+    const src = readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
+    const start = src.indexOf('export function isRegisteredWorkspace')
+    const body = src.slice(start, start + 700)
+    assert.match(body, /normalize\(p\)/, 'identity must not depend on spelling')
+    assert.equal(
+      (src.match(/realpath/g) ?? []).length,
+      0,
+      'realpath would hit the filesystem per call and change what "registered" means',
+    )
   })
 })
