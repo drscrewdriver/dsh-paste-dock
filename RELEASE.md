@@ -2,6 +2,46 @@
 
 > 发版走 `npm run release`(自动控版本号/构建/测试/pack 核对 → PR → 合并后打 tag → OIDC publish,`next` 观察后人工转 `latest`)。
 
+## 0.2.0 — 工具链与测试面全量 TypeScript 化(paste-dock-ts-rewrite 计划)
+
+> 零行为变更的重构版。`src/` 本来已全部是 TS,本次清掉残留的 12 个 `.mjs` 与
+> 2459 行 `.js` 测试,并把三套 tsconfig 的严格度一次性加严。不引入 tsx/ts-node——
+> 工具链靠 Node 22 原生类型剥离直跑 `node tools/x.ts`。
+
+### 改动面
+
+- **rc.1** 新增 `tsconfig.tools.json`(NodeNext / noEmit / allowImportingTsExtensions / strict),10 个
+  `scripts/`、`tools/` 文件 `.mjs`→`.ts` 并补类型;`tools/metrics` 解析器由 espree 换成已装的
+  typescript 编译器 API(改名后 espree 不吃类型注解,而该门把解析失败判 exit 1);`ci.yml` 增加
+  Node ≥ 22.18 断言与一个真跑 `.ts` 的探针,防镜像回落。
+- **rc.2** `tests/release.test.js`→`.ts`,只补类型、断言零改动。
+- **rc.3** `smoke.mjs`→`.ts`;`test/fixtures/compatibility-probe.mjs`→`.ts`,但宿主 loader 只吃 JS,
+  故在拷贝边界剥类后仍写 `sandbox/probe.mjs`,挂载面扩展名与形状不变。
+- **rc.4** 三配置同开 `noUncheckedIndexedAccess` / `exactOptionalPropertyTypes` / `noImplicitOverride`;
+  `noPropertyAccessFromIndexSignature` 实测 client 27 / tools 27 而拒开(数字与理由写在配置头注)。
+- **rc.5** 删 `lib/` 镜像与 `scripts/sync-lib.ts`(证据:npm tarball 从不包含 lib、真装机目录均只有
+  dist、profile 走 registry 钉版、本机无 dsh-super-injector 存迹),产物对拍改为 `git diff -- dist`。
+- **rc.6** 纯 bump 片,无代码差异。
+
+### 行为差异面(实测)
+
+与 0.1.28 对比,`dist/index.js` 与 `dist/typert.host.js` **逐字节相同**;`dist/client.js` 只有
+1 个 hunk、−2/+3 行,全在 `parseRegistryRow`:改为在 `chars` 非数字时**不写该键**而不是写
+`undefined`(`exactOptionalPropertyTypes` 要求;而 `JSON.stringify` 本来就会丢弃 undefined 键,
+所以真正落进 sessionStorage 的形状没变)。`npm pack` 清单与 0.1.28 逐条相同(32 → 32)。
+
+### 门禁与计数器
+
+三配置 typecheck / build / 产物对拍 / lint / format:check / metrics(0 超限) / **162 tests** /
+smoke / privacy-scan / privacy-gate --selftest 全绿。`as any` 仓内仍为 5(全在 `src/`,新增 0)、
+非空断言 0;全仓无 `enum`/`namespace`/参数属性。eslint 面收敛:espree 不能解析类型注解,工具面
+改由 `tsconfig.tools.json` 守门,且 `lint` 目标写成显式文件名——`eslint .` 在零匹配时静默 exit 0。
+
+### 发布
+
+`0.2.0-rc.1` … `rc.6` 全部走 dist-tag `rc`(六个均带 provenance),`latest` 与全部 `dsh-*`
+线标签未动;正式版发 `next`,观察后人工转 `latest`。
+
 ## 0.1.17 – 0.1.28:硬化 12 版(paste-dock-hardening 计划)
 
 > 一子项一版,回滚粒度 = 改动粒度。每版先发 `-rc.1`(dist-tag `rc`)再发正式版
