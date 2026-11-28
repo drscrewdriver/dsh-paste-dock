@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve, delimiter, relative, isAbsolute } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
+import ts from 'typescript'
 import { supportedHosts, peerRange } from './hosts.ts'
 
 const firstLine = (error: unknown): string =>
@@ -369,7 +370,13 @@ try {
   report.checks.push('插件包经 peer 闸装入 profile')
 
   // 4. 带探针启动宿主。
-  await cp(join(root, 'test', 'fixtures', 'compatibility-probe.mjs'), join(sandbox, 'probe.mjs'))
+  // 探针源已 TS 化，而宿主 loader 只吃 JS：在**拷贝边界**剥类型，
+  // 沙箱里的产物仍是 probe.mjs（逐字节可对照旧版：transpile 仅把注解替成空白）。
+  const probeSrc = await readFile(join(root, 'test', 'fixtures', 'compatibility-probe.ts'), 'utf8')
+  const probeJs = ts.transpileModule(probeSrc, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+  await writeFile(join(sandbox, 'probe.mjs'), probeJs, 'utf8')
   await writeFile(
     join(sandbox, 'probe.yml'),
     `- insert:\n    - id: paste-dock-compat-probe\n      name: ${JSON.stringify(pathToFileURL(join(sandbox, 'probe.mjs')).href)}\n`,

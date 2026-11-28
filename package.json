@@ -1,6 +1,6 @@
 {
   "name": "dsh-paste-dock",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.0-rc.3",
   "description": "dsh-paste-dock — DeepSeek Harness 插件:大段文本粘贴自动存为 pastes/*.txt,输入框上方 dock 卡片管理,草稿内只留最小徽标。",
   "repository": {
     "type": "git",
@@ -62,8 +62,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json && tsc -p tsconfig.tools.json",
     "test": "node --test tests/release.test.ts",
     "lint": "eslint eslint.config.js",
-    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\" \"tools/**/*.ts\" \"smoke.mjs\" \"tests/**/*.ts\" \"tsdown.config.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\" \"tools/**/*.ts\" \"smoke.mjs\" \"tests/**/*.ts\" \"tsdown.config.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\" \"tools/**/*.ts\" \"smoke.ts\" \"test/**/*.ts\" \"tests/**/*.ts\" \"tsdown.config.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\" \"tools/**/*.ts\" \"smoke.ts\" \"test/**/*.ts\" \"tests/**/*.ts\" \"tsdown.config.ts\"",
     "metrics": "node tools/metrics.ts",
     "privacy": "node tools/privacy-scan.ts"
   },

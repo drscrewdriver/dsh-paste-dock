@@ -1,5 +1,5 @@
 // dsh-paste-dock self-test smoke — run from the plugin directory after build:
-//   node smoke.mjs
+//   node smoke.ts
 // Covers: export surface, deterministic paste filename, a real write+readback
 // roundtrip into an OS temp dir, workspace resolution logic, and the hand-written
 // Typert host manifest shape (what typert-loader validates) for EVERY invocation.
@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os'
 import { apply, name, savePasteTo, pasteFilename, resolveWorkspaceDir } from './dist/index.js'
 import { TYPERT } from './dist/typert.host.js'
 
-const fail = (msg) => {
+// 写成函数声明而不是 const 箭头：只有显式 `: never` 的函数声明能让
+// tsc 把调用后面的分支约简为不可达，否则每一处 fail() 后面都得再写一次窄化。
+function fail(msg: string): never {
   console.error('SMOKE-FAIL:', msg)
   process.exit(1)
 }
@@ -43,7 +45,7 @@ try {
 // 4. workspace resolution: STRICT — an unknown or ambiguous session is refused
 // outright; the plugin never silently routes a paste into another workspace.
 const fakeCtx = {
-  get(key) {
+  get(key: string) {
     if (key === 'workspaceRegistry') {
       return {
         list: () => [
@@ -55,7 +57,7 @@ const fakeCtx = {
     return undefined
   },
 }
-const refuses = (fn, label) => {
+const refuses = (fn: () => unknown, label: string): void => {
   try {
     fn()
   } catch (error) {
@@ -116,6 +118,7 @@ for (const method of EXPECTED_METHODS) {
 }
 if (seen.length !== EXPECTED_METHODS.length) fail(`unexpected invocation set: ${seen.join(', ')}`)
 const savePasteInvocation = TYPERT.invocations.find((inv) => inv.method === 'savePaste')
+if (!savePasteInvocation) fail('manifest is missing the savePaste invocation')
 // Wire contract: the browser half needs the absolute path (the sidebar's file API
 // refuses relative ones → 400), while the model-facing tool output stays narrowed.
 const resultKeys = Object.keys(savePasteInvocation.result.schema.shape).sort()
