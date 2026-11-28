@@ -9,7 +9,7 @@
 //   scripts/** tools/** smoke.ts —— 工具链，0.2.0-rc.1 起 `.mjs`→`.ts`，
 //                        由 `tsc -p tsconfig.tools.json` 守门（见下方「为什么不是 eslint」）。
 //   tests/**          —— node:test 契约/回归测试自证，不受 lint 约束（与 doc2md 口径一致）。
-//   dist/ lib/        —— 构建产物（tools/metrics.ts 同样不度量）。
+//   dist/             —— 构建产物（tools/metrics.ts 同样不度量）。
 //
 // 为什么工具面不能留在 eslint 里（实测，不是推测）：
 //   eslint 核心的 espree 解析器不吃类型语法 —— 对 `const a: number = 1` 直接
@@ -45,7 +45,7 @@ const NODE = {
 }
 
 export default [
-  { ignores: ['node_modules/**', 'dist/**', 'lib/**', 'pastes/**', '*.tgz'] },
+  { ignores: ['node_modules/**', 'dist/**', 'pastes/**', '*.tgz'] },
   NODE,
   prettier, // 关闭与 Prettier 冲突的规则（必须置尾）
 ]

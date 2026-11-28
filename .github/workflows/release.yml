@@ -79,7 +79,7 @@ jobs:
 
       # ⑤ 产物一致性（build 后、smoke 前，与 ci.yml 对齐）
       - name: 产物一致性
-        run: git diff --exit-code -- dist lib
+        run: git diff --exit-code -- dist
 
       # ⑥ Smoke
       - name: Smoke

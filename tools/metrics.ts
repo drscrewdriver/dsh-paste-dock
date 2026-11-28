@@ -4,7 +4,7 @@
 // 产出：CODE-METRICS.md（每次运行覆盖写：基线 + 全量函数清单 + 超限红名单）
 // 度量对象：src/**/*.js（web client 半身，历史遗留）+ scripts/**/*.ts + smoke.ts ——
 //           与 eslint.config.js 的白名单口径一致（TS 面由 tsc 守门，这里只卡复杂度）；
-//           src/*.ts 由 tsc 守门、tests/ 自证、dist/ 与 lib/ 是构建产物，均不度量。
+//           src/*.ts 由 tsc 守门、tests/ 自证、dist/ 是构建产物，均不度量。
 //
 // 解析器（2026-11-28 起）：**typescript 编译器 API**，不再是 espree。
 //   原因：被度量面已 TS 化，类型注解会让 espree 直接抛 Parsing error，

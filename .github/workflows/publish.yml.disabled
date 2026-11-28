@@ -68,8 +68,8 @@ jobs:
           pnpm test
           node smoke.ts
 
-      - name: Build artifacts must match sources (dist/ + lib/)
-        run: git diff --exit-code -- dist lib
+      - name: Build artifacts must match sources (dist/)
+        run: git diff --exit-code -- dist
 
       - name: Verify tag matches package.json version
         run: |
