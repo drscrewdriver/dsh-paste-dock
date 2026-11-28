@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const pairs = [
+const pairs: Array<[string, string]> = [
   ['dist/index.js', 'lib/index.js'],
   ['dist/typert.host.js', 'lib/typert.host.js'],
   ['dist/client.js', 'lib/client.js'],

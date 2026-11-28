@@ -6,6 +6,10 @@
     "lib": ["es2022", "dom", "dom.iterable"],
     "types": ["node", "react"],
     "strict": true,
+    // 与 tsconfig.json / tsconfig.tools.json 同源的 rc.4 严格度三件，三份必须同步改。
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
     "noEmit": true,
     "verbatimModuleSyntax": true,
     "esModuleInterop": true,

@@ -87,12 +87,16 @@ function parseRegistryRow(entry: unknown): PasteEntry | null {
   if (entry === null || typeof entry !== 'object') return null
   const record = entry as Record<string, unknown>
   if (typeof record.path !== 'string') return null
-  return {
+  const row: PasteEntry = {
     path: record.path,
-    chars: typeof record.chars === 'number' ? record.chars : undefined,
     name: typeof record.name === 'string' ? record.name : pasteNameOf(record.path),
     preview: typeof record.preview === 'string' ? record.preview : '',
   }
+  // exactOptionalPropertyTypes：读不到 chars 时**不写这个键**，而不是写 undefined。
+  // 下游 `entry.chars ?? …` 两种写法同果，而 sessionStorage 那侧的 JSON 本来就会
+  // 丢弃 undefined 键 —— 不写才是原本真正落盘的形状。
+  if (typeof record.chars === 'number') row.chars = record.chars
+  return row
 }
 
 /**

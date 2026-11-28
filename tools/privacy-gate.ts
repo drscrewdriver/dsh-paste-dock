@@ -179,13 +179,15 @@ function loadAllowlist(repoRoot: string): Map<string, Set<string>> {
       const line = raw.trim()
       if (!line || line.startsWith('#')) continue
       const m = /^([a-z0-9-]{1,32})\s+([0-9a-f]{16})\b/.exec(line)
-      if (!m) continue
-      let hashes = map.get(m[1])
+      const ruleId = m?.[1]
+      const digest = m?.[2]
+      if (!ruleId || !digest) continue
+      let hashes = map.get(ruleId)
       if (!hashes) {
         hashes = new Set<string>()
-        map.set(m[1], hashes)
+        map.set(ruleId, hashes)
       }
-      hashes.add(m[2])
+      hashes.add(digest)
     }
   } catch {
     /* 读不到就当没有：这是"少放行"，fail-closed 方向 */
@@ -197,8 +199,7 @@ function loadAllowlist(repoRoot: string): Map<string, Set<string>> {
 function scanText(text: string, fileLabel: string): Finding[] {
   const out: Finding[] = []
   const lines = text.split(/\r?\n/)
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i]
+  for (const [i, line] of lines.entries()) {
     if (line.length > 20000) continue
     for (const r of RULES) {
       r.find.lastIndex = 0
@@ -214,7 +215,9 @@ function scanText(text: string, fileLabel: string): Finding[] {
           fix: r.fix,
           file: fileLabel,
           line: i + 1,
-          shape: EXPLAIN ? `${maskValue(literal)}  hash=${hash16(literal)}` : undefined,
+          // exactOptionalPropertyTypes：--explain 之外**不写 shape 这个键**，
+          // 而不是写 undefined —— 两种形状在 JSON/日志里本来就不该同形。
+          ...(EXPLAIN ? { shape: `${maskValue(literal)}  hash=${hash16(literal)}` } : {}),
         })
         break // 同一行同一规则只报一次
       }
@@ -261,7 +264,8 @@ function scanPatch(patchText: string, opts: { trackCommit?: boolean } = {}): Fin
     if (raw.startsWith('+')) {
       const text = raw.slice(1)
       for (const f of scanText(text, file)) {
-        findings.push({ ...f, line: newLine, commit: trackCommit ? commit : undefined })
+        // exactOptionalPropertyTypes：不带 commit 上下文时不写该键。
+        findings.push({ ...f, line: newLine, ...(trackCommit ? { commit } : {}) })
       }
       newLine += 1
       continue
@@ -295,7 +299,7 @@ const KNOWN_GAPS = [
 //    拼接只让门禁认不出自己，值仍然会被提交进公开仓 —— 那等于把脱敏白做了。
 //    真实泄漏值只能进 `--explain` 的哈希，绝不能进源码。
 const J = (...p: string[]) => p.join('')
-const POSITIVE = [
+const POSITIVE: Array<[string, string]> = [
   ['win-user-path', J('见 C:\\Users\\', 'zhangsan', '\\dsh-workspace\\doc2md 下的文件')],
   ['posix-home-path', J('路径 /home/', 'zhangsan', '/project/x 不存在')],
   ['lan-ipv4', J('服务跑在 ', '10.20.30', '.40:8099')],
@@ -317,7 +321,7 @@ const POSITIVE = [
   ['secret-github', J('ghp_', 'abcdefghijklmnopqrstuvwxyz0123456789')],
   ['secret-private-key', J('-----BEGIN RSA', ' PRIVATE KEY-----')],
 ]
-const NEGATIVE = [
+const NEGATIVE: Array<[string, string]> = [
   ['win-user-path', '报告里写 <工作区> 而不是本机路径'],
   ['win-user-path', 'C:\\Users\\<用户名>\\dsh-workspace'],
   ['win-user-path', 'C:/Users/someone/ws/pastes/x.txt'],
@@ -432,14 +436,14 @@ try {
       return r.status === 0
     }
     for (const line of stdin.split('\n')) {
-      const [, localSha, , remoteSha] = line.trim().split(/\s+/)
+      const [, localSha, , remoteSha = ''] = line.trim().split(/\s+/)
       if (!localSha) continue
       // 删除远端引用时 localSha 是全零：没有任何内容会被推上去，无从扫也无须扫。
       // 诚实说明：`000…0..000…0` 恰好是个**空范围**，所以旧实现并不会在这里崩
       // （反向打补丁实测 exit 0）；这一行是显式意图 + 防止将来改成别的范围算法后
       // 反而崩掉，不是已发生故障的修复。
       if (zero.test(localSha)) continue
-      const firstPush = zero.test(remoteSha ?? '')
+      const firstPush = zero.test(remoteSha)
       // force-push（远端对象本地已不可达）时，范围无从谈起，只能扫本侧可达的全部提交。
       // 取舍：范围偏大 ⇒ 可能重复报出远端早已存在的历史欠债；但它**不会漏**，
       // 而漏报才是这道门唯一不可接受的失败。

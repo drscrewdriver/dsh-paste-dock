@@ -211,12 +211,14 @@ for (const file of targets) {
       ? ts.ScriptKind.TS
       : ts.ScriptKind.JS
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind)
-  const diag = (sf as unknown as { parseDiagnostics?: ts.DiagnosticWithLocation[] })
-    .parseDiagnostics
-  if (diag && diag.length > 0) {
+  const diag: readonly ts.DiagnosticWithLocation[] =
+    (sf as unknown as { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] })
+      .parseDiagnostics ?? []
+  if (diag.length > 0) {
+    const [first] = diag
     parseErrors.push({
       file: path.relative(ROOT, file).split(path.sep).join('/'),
-      error: ts.flattenDiagnosticMessageText(diag[0].messageText, ' '),
+      error: first ? ts.flattenDiagnosticMessageText(first.messageText, ' ') : 'parse failed',
     })
     continue
   }

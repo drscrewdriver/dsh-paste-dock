@@ -8,6 +8,13 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
+    // 0.2.0-rc.4 严格度加严（与 tsconfig.client.json / tsconfig.tools.json 同源，三份必须同步改）。
+    // noUncheckedIndexedAccess：下标访问一律带 undefined，逼调用点显式处理越界。
+    // exactOptionalPropertyTypes：可选属性不接受显式 undefined，「没这个键」与「键为 undefined」分开。
+    // noImplicitOverride：覆盖父类成员必须写 override，静音意外遮蔽。
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
     "declaration": false,
     "sourceMap": false,
     "verbatimModuleSyntax": true,
