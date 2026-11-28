@@ -45,6 +45,19 @@ import {
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
+/**
+ * settings provider 测试夹具的形状——能力面逐宿主线不同，全部可缺：
+ * 0.1.6 有 get/register，0.1.7 只剩 update/mutate（这正是本文件要钉住的那次跌落）。
+ * 声明成可选而不是现取现断言，测试里的 `typeof service.get` 才能合法地证明它缺席。
+ */
+interface SettingsProbe {
+  update?: () => Promise<void>
+  mutate?: () => Promise<void>
+  get?: () => unknown
+  register?: () => void
+  describe?: () => unknown
+}
+
 // The web client half is TS modules under src/client/ (bundled by tsdown into
 // one dist/client.js). Source-level guards read the virtual concatenation in
 // dependency order, so slice markers within one module still resolve.
@@ -117,7 +130,7 @@ describe('savePasteTo — write/read-back roundtrip', () => {
 // question — the file must be UTF-8 bytes, never the console code page.
 describe('savePasteTo — encoding & shape stress (2026-10-01)', () => {
   const STAMP = new Date(2026, 9, 1, 7, 30, 0, 0)
-  const rawOf = (dir, rel) => readFile(join(dir, rel))
+  const rawOf = (dir: string, rel: string) => readFile(join(dir, rel))
 
   test('CRLF survives verbatim — no newline normalization in either direction', async () => {
     const dir = await tmpDir()
@@ -216,8 +229,8 @@ describe('savePasteTo — encoding & shape stress (2026-10-01)', () => {
 })
 
 describe('resolveWorkspaceDir — strict session→workspace routing (no silent fallback)', () => {
-  const ctxWith = (workspaces) => ({
-    get(name) {
+  const ctxWith = (workspaces: unknown[]) => ({
+    get(name: string) {
       return name === 'workspaceRegistry' ? { list: () => workspaces } : undefined
     },
   })
@@ -240,18 +253,19 @@ describe('resolveWorkspaceDir — strict session→workspace routing (no silent 
       resolveWorkspaceDir(ctxWith([wsA, wsB]), 'nobody')
       assert.fail('expected an unknown session to be refused')
     } catch (err) {
-      assert.match(err.message, /nobody/) // why: which session was involved
+      const e = err as Error // 只补类型：断言本体一字未改
+      assert.match(e.message, /nobody/) // why: which session was involved
       // Re-specified 2026-09-29 (independent privacy review): the message identifies
       // the workspaces by FOLDER NAME. It used to spell out each absolute path, so a
       // user pasting this error into a public issue published their machine layout.
-      assert.match(err.message, /\bws-a\b/) // what exists — by folder name only
-      assert.match(err.message, /\bws-b\b/)
+      assert.match(e.message, /\bws-a\b/) // what exists — by folder name only
+      assert.match(e.message, /\bws-b\b/)
       assert.doesNotMatch(
-        err.message,
+        e.message,
         /[A-Za-z]:[\\/]/,
         'no drive-letter path may ride along in session text',
       )
-      assert.match(err.message, /How to fix/i) // how to recover
+      assert.match(e.message, /How to fix/i) // how to recover
     }
   })
 
@@ -943,9 +957,12 @@ describe('PasteSettingsSchema — the user layer this plugin owns', () => {
   })
 
   test('zero, negatives, fractions and strings are refused by the schema itself', () => {
-    for (const bad of [0, -1, 1.5, '2000']) {
+    // 故意含一个字符串：这一组就是投毒输入，所以宽成 unknown[]，
+    // 调用点只在一处 as number 里说「我知道形状不对」。
+    const BAD_MIN_CHARS: unknown[] = [0, -1, 1.5, '2000']
+    for (const bad of BAD_MIN_CHARS) {
       assert.throws(
-        () => PasteSettingsSchema({ minChars: bad }),
+        () => PasteSettingsSchema({ minChars: bad as number }),
         `expected the stored section to be refused for ${String(bad)}`,
       )
     }
@@ -953,7 +970,7 @@ describe('PasteSettingsSchema — the user layer this plugin owns', () => {
 })
 
 describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client honesty', () => {
-  const readSrc = (...parts) => readFileSync(join(PKG_ROOT, ...parts), 'utf8')
+  const readSrc = (...parts: string[]) => readFileSync(join(PKG_ROOT, ...parts), 'utf8')
   const readHost = () => readSrc('src', 'index.ts')
 
   // A1 — publishing belongs to .github/workflows/publish.yml (OIDC, triggered by the
@@ -1153,7 +1170,7 @@ describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client h
 })
 
 describe('review batch C (2026-09-12) — frozen chars unit, absolute path stays host-side', () => {
-  const readSrc = (...parts) => readFileSync(join(PKG_ROOT, ...parts), 'utf8')
+  const readSrc = (...parts: string[]) => readFileSync(join(PKG_ROOT, ...parts), 'utf8')
   const readHost = () => readSrc('src', 'index.ts')
 
   // C1 — the unit is a frozen contract, not an accident: every reference line
@@ -1222,8 +1239,8 @@ describe('review batch C (2026-09-12) — frozen chars unit, absolute path stays
 })
 
 describe('0.1.5-① — the hint says so when no sidebar is installed', () => {
-  const count = (src, re) => (src.match(re) ?? []).length
-  const from = (src, marker, span = 900) => {
+  const count = (src: string, re: RegExp) => (src.match(re) ?? []).length
+  const from = (src: string, marker: string, span = 900) => {
     const start = src.indexOf(marker)
     assert.ok(start >= 0, `${marker} must exist in src/client.js`)
     return src.slice(start, start + span)
@@ -1292,10 +1309,10 @@ describe('0.1.5-① — the hint says so when no sidebar is installed', () => {
 
 describe('settings capability probes — dsh 0.1.7 dropped get/register (2026-09-29)', () => {
   const readHost = () => readFileSync(join(PKG_ROOT, 'src', 'index.ts'), 'utf8')
-  const count = (text, re) => (text.match(re) ?? []).length
+  const count = (text: string, re: RegExp) => (text.match(re) ?? []).length
 
   // The 0.1.6 shape: the namespace is readable through `get`.
-  const legacySettings = () => ({
+  const legacySettings = (): SettingsProbe => ({
     register: () => {},
     get: () => ({ [MIN_CHARS_FIELD]: 1234 }),
     update: async () => {},
@@ -1303,7 +1320,7 @@ describe('settings capability probes — dsh 0.1.7 dropped get/register (2026-09
   })
 
   // The 0.1.7 shape, measured in the lab: the service exists, the reader does not.
-  const formsSettings = () => ({
+  const formsSettings = (): SettingsProbe => ({
     update: async () => {},
     mutate: async () => {},
   })
@@ -1478,8 +1495,8 @@ describe('0.1.7 keeps settings in the plugin Config — read live, never cached 
 })
 
 describe('large pastes survive dsh 0.1.7 dropping list.current (2026-09-29)', () => {
-  const count = (text, re) => (text.match(re) ?? []).length
-  const from = (text, anchor, span) => {
+  const count = (text: string, re: RegExp) => (text.match(re) ?? []).length
+  const from = (text: string, anchor: string, span: number) => {
     const start = text.indexOf(anchor)
     assert.ok(start >= 0, `${anchor} must exist`)
     return text.slice(start, start + span)
@@ -1607,7 +1624,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
     const dir = mkdtempSync(join(tmpdir(), 'dsh-tag-guard-'))
     mkdirSync(join(dir, 'scripts'))
     cpSync(join(PKG_ROOT, 'scripts', 'release.ts'), join(dir, 'scripts', 'release.ts'))
-    const writePkg = (version) =>
+    const writePkg = (version: string) =>
       writeFileSync(
         join(dir, 'package.json'),
         // type:module 与真仓 package.json 同源——沙箱里的 release.ts 带 ESM 语法，
@@ -1618,7 +1635,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
           2,
         ) + '\n',
       )
-    const mustGit = (args) => {
+    const mustGit = (args: string[]) => {
       const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
       assert.equal(r.status, 0, `git ${args.join(' ')} 失败: ${r.stderr}`)
       return (r.stdout || '').trim()
@@ -1645,7 +1662,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
     return { dir, A, B, M, mustGit }
   }
 
-  const runGuard = (dir) => {
+  const runGuard = (dir: string) => {
     const r = spawnSync(process.execPath, [join(dir, 'scripts', 'release.ts'), '--tag'], {
       cwd: dir,
       encoding: 'utf8',
@@ -1854,7 +1871,7 @@ describe('paste dock — the fork contract (0.1.0)', () => {
 describe('V1 · 0.1.17 — a saved paste is never re-inserted (D1)', () => {
   // The chain from the save call to the line after both handlers: everything a
   // "we lost your paste" decision could be made in.
-  const pasteChain = (src) => {
+  const pasteChain = (src: string) => {
     const start = src.indexOf('savePaste(connection, sessionId, text)')
     assert.ok(start > 0, 'the paste chain must exist in src/client/index.ts')
     const end = src.indexOf("document.addEventListener('paste'", start)
@@ -2009,7 +2026,7 @@ describe('V3 · 0.1.19 — name collisions are bounded (HD8)', () => {
 })
 
 describe('V4 · 0.1.20 — the settings row reports honestly (HD4)', () => {
-  const settingsService = (impl) => ({
+  const settingsService = (impl: SettingsProbe) => ({
     update: async () => {},
     mutate: async () => {},
     ...impl,
@@ -2337,6 +2354,7 @@ describe('V11 · 0.1.27 — the paste directory is configurable (#27)', () => {
     assert.deepEqual(resolvePasteDir('pastes'), { kind: 'workspace', subdir: 'pastes' })
     assert.deepEqual(resolvePasteDir('tmp/scratch'), { kind: 'workspace', subdir: 'tmp/scratch' })
     const abs = resolvePasteDir(join(tmpdir(), 'elsewhere'))
+    assert.ok(abs, 'an absolute host path must resolve, not come back empty')
     assert.equal(abs.kind, 'absolute')
     assert.equal(abs.dir, join(tmpdir(), 'elsewhere'))
   })
