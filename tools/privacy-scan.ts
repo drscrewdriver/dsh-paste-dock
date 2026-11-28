@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/privacy-scan.mjs — the BLOCKING privacy gate for this repository.
+// tools/privacy-scan.ts — the BLOCKING privacy gate for this repository.
 //
 // Why this file exists (2026-09-29): two independent reviewers found that the
 // 2026-09-13 self-audit had signed off on leaks it could not have seen. It used
@@ -45,14 +45,14 @@ const NOREPLY = 'users.noreply.github.com'
  *
  * The address itself is assembled below rather than written out, because a literal
  * in the shape of an address is indistinguishable from a leak to any scanner that
- * reads this file — including tools/privacy-gate.mjs, whose own source comments warn
+ * reads this file — including tools/privacy-gate.ts, whose own source comments warn
  * about exactly this ("连解释这件事的注释都不能再出现那种形状").
  * Exact match only: this full address is allowed, any other address on that domain is not.
  */
 const GITHUB_MACHINE_EMAIL = `noreply${'@'}${'github'}.com`
 
 /** Patterns that must never appear. Each reports a category only. */
-const PATTERNS = [
+const PATTERNS: Array<[string, RegExp]> = [
   // The user segment must not start with `<`: that is documentation writing the
   // SHAPE of a path (e.g. the hooks README stating the rule it blocks), and `<` is
   // not legal in a Windows user name, so the angle-bracket form can never be an
@@ -62,7 +62,7 @@ const PATTERNS = [
   ['unix-home-path', /[\\/](?:home|Users)[\\/](?!<)[A-Za-z0-9._-]+\//],
   // A GitHub noreply address is PUBLIC BY DESIGN — the coordination rules REQUIRE
   // it as the commit identity, and the local hook has always excluded it
-  // (tools/privacy-gate.mjs:81 uses these same three alternatives). THIS scanner
+  // (tools/privacy-gate.ts:81 uses these same three alternatives). THIS scanner
   // did not, so a noreply address written into a release record passed the hook
   // and failed CI: 2026-10-02, commit 64d1b53 → PR #8 went red on `email`.
   // Two doors, one rule — this is the outlier being aligned, not the rule relaxed.
@@ -88,12 +88,20 @@ const ALLOW = [
   'C:\\Users\\someone',
 ]
 
-const findings = []
-const note = (check, category, location, detail = '') =>
+interface ScanFinding {
+  check: string
+  category: string
+  location: string
+  detail: string
+}
+
+const findings: ScanFinding[] = []
+const note = (check: string, category: string, location: string, detail = ''): void => {
   findings.push({ check, category, location, detail })
+}
 
 /** Run git with stdout going straight to a FILE — never a pipe (works in every sandbox). */
-function gitToFile(args, outPath) {
+function gitToFile(args: string[], outPath: string): boolean {
   const fd = openSync(outPath, 'w')
   try {
     const res = spawnSync('git', args, { cwd: ROOT, stdio: ['ignore', fd, 'inherit'] })
@@ -104,7 +112,7 @@ function gitToFile(args, outPath) {
   }
 }
 
-function allowed(line) {
+function allowed(line: string): boolean {
   return ALLOW.some((token) => line.includes(token))
 }
 
@@ -134,14 +142,19 @@ function scanRefs() {
 }
 
 // ── 1. identity over ALL history ────────────────────────────────────────────
-function checkIdentity(tmp) {
+interface IdentityResult {
+  commits: number
+  domains: string[]
+}
+
+function checkIdentity(tmp: string): IdentityResult {
   const out = join(tmp, 'identities.txt')
   if (!gitToFile(['log', ...scanRefs(), '--format=%H|%ae|%ce'], out)) {
     note('identity', 'git-failed', 'git log <branches+tags>', 'could not read history')
     return { commits: 0, domains: [] }
   }
   let checked = 0
-  const domains = new Set()
+  const domains = new Set<string>()
   for (const line of readFileSync(out, 'utf8').split('\n')) {
     if (line.trim() === '') continue
     const [sha, author, committer] = line.split('|')
@@ -164,7 +177,7 @@ function checkIdentity(tmp) {
 }
 
 // ── 2. the full patch stream ────────────────────────────────────────────────
-function checkHistory(tmp) {
+function checkHistory(tmp: string): number {
   const out = join(tmp, 'history.diff')
   // `--format=commit %H` is deliberate: the default log header prints an
   // `Author: … <…@users.noreply.github.com>` line per commit, which the email
@@ -195,10 +208,12 @@ function checkHistory(tmp) {
 }
 
 // ── 3. what would actually ship ─────────────────────────────────────────────
-function shippedFiles() {
-  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
+function shippedFiles(): string[] {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+    files?: string[]
+  }
   const out = new Set(['package.json', 'README.md', 'LICENSE'])
-  const walk = (abs) => {
+  const walk = (abs: string): void => {
     for (const entry of readdirSync(abs, { withFileTypes: true })) {
       const child = join(abs, entry.name)
       if (entry.isDirectory()) walk(child)
@@ -217,7 +232,7 @@ function shippedFiles() {
   return [...out].sort()
 }
 
-function checkPackage() {
+function checkPackage(): string[] {
   const shipped = shippedFiles()
   for (const rel of shipped) {
     if (/^(?:_|\.私档|pastes|node_modules)/.test(rel)) {
@@ -243,9 +258,9 @@ function checkPackage() {
 
 // ── run ─────────────────────────────────────────────────────────────────────
 const tmp = mkdtempSync(join(tmpdir(), 'dsh-privacy-scan-'))
-let identity = { commits: 0, domains: [] }
+let identity: IdentityResult = { commits: 0, domains: [] }
 let historyLines = 0
-let shipped = []
+let shipped: string[] = []
 try {
   identity = checkIdentity(tmp)
   historyLines = checkHistory(tmp)
@@ -254,7 +269,7 @@ try {
   rmSync(tmp, { recursive: true, force: true })
 }
 
-const byCheck = (name) => findings.filter((f) => f.check === name)
+const byCheck = (name: string): ScanFinding[] => findings.filter((f) => f.check === name)
 console.log(`[privacy] identities checked: ${identity.commits} commits (author + committer)`)
 console.log(
   `[privacy] history scanned:    ${historyLines} patch lines (git log -p <branches+tags>)`,

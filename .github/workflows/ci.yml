@@ -10,7 +10,7 @@
 #     ⚠️ checkout 必须 `fetch-depth: 0`，浅克隆看不到历史 ⇒ 门禁退化成装饰。
 #   - 依赖用 pnpm（仓库有 pnpm-lock.yaml）。`pnpm-workspace.yaml` 的 minimumReleaseAgeExclude
 #     是 0.1.5-rc.1 这批「刚发布」的包过 minimumReleaseAge 供应链策略所必需，随仓库提交。
-#   - `metrics` 是硬门禁：超限函数数 > 0 或存在解析失败文件即 exit 1（见 tools/metrics.mjs）。
+#   - `metrics` 是硬门禁：超限函数数 > 0 或存在解析失败文件即 exit 1（见 tools/metrics.ts）。
 #   - 产物一致性：dist/ 与 lib/ 是入库产物（dsh loader 读 dist/，super-injector 读 lib/），
 #     构建后必须与源码一致——`git diff --exit-code` 非零即视为「产物落后于源码」。
 name: ci
@@ -39,8 +39,20 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Node type-stripping probe (toolchain runs .ts directly)
+        # 工具链（scripts/ tools/）与测试都不经构建，靠 Node 原生类型剥离直跑 .ts。
+        # 该能力自 Node 22.18 起默认开启 ⇒ 镜像回落会让所有门禁以
+        # "Unknown file extension .ts" 崩成一片红，看不出根因。这里先把它
+        # 断成一条可读失败。版本下限与 package.json engines.node 同源。
+        run: |
+          node -v
+          node -e 'const [maj,min]=process.versions.node.split(".").map(Number); if (maj<22 || (maj===22 && min<18)) { console.error("需要 Node >= 22.18（原生类型剥离）"); process.exit(1) }'
+          printf 'const probe: string = "ts-strip-ok"\nconsole.log(probe)\n' > .ts-probe.ts
+          node .ts-probe.ts
+          rm .ts-probe.ts
+
       - name: Privacy gate (identity + history + package)
-        run: node tools/privacy-scan.mjs
+        run: node tools/privacy-scan.ts
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

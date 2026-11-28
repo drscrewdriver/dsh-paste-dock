@@ -1,0 +1,30 @@
+{
+  // 工具链（构建/发布/门禁脚本）与测试的类型门面。
+  // 与 src 两份 tsconfig 的分工：src/* 产出 dist/（tsc 真编译），本配置**只检查不产出**——
+  // 这些文件由 Node 22 的原生类型剥离直跑（`node tools/x.ts`），没有构建步骤，
+  // 所以相对导入必须写真实扩展名 `.ts`（类型剥离不做 .js→.ts 映射）。
+  // 代价写进约束：禁用 enum / namespace / 参数属性 / 旧式装饰器——它们需要 emit 才能落地。
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "tools/**/*.ts",
+    "tests/**/*.ts",
+    "smoke.ts",
+    "test/**/*.ts"
+  ]
+}

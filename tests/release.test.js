@@ -966,8 +966,8 @@ describe('review batch A/B (2026-09-12) — release pipeline, wire cap, client h
   //      made before the merge would sit on the branch commit, one step behind main.
   // The bump is still committed before any tag exists, which is the property that
   // actually matters: a tag must never point at the previous version.
-  test('release.mjs commits the bump, ships it via a PR, and tags only AFTER the merge', () => {
-    const src = readSrc('scripts', 'release.mjs')
+  test('release.ts commits the bump, ships it via a PR, and tags only AFTER the merge', () => {
+    const src = readSrc('scripts', 'release.ts')
     const commit = src.indexOf('git add package.json')
     assert.ok(commit >= 0, 'the version bump must still be committed by the script')
     assert.doesNotMatch(
@@ -1547,7 +1547,7 @@ describe('privacy-gate pre-push — a force-push is not a blocked push (2026-09-
    * reads like a malfunction, which is how it was first reported.
    */
   test('an unreachable remote sha (force-push) falls back instead of blocking', () => {
-    const gate = join(PKG_ROOT, 'tools', 'privacy-gate.mjs')
+    const gate = join(PKG_ROOT, 'tools', 'privacy-gate.ts')
     const localSha = spawnSync('git', ['rev-parse', 'HEAD'], {
       cwd: PKG_ROOT,
       encoding: 'utf8',
@@ -1572,7 +1572,7 @@ describe('privacy-gate pre-push — a force-push is not a blocked push (2026-09-
    * cheap guard so a deletion can never start failing closed in future.
    */
   test('an all-zero local ref (branch deletion) exits 0', () => {
-    const gate = join(PKG_ROOT, 'tools', 'privacy-gate.mjs')
+    const gate = join(PKG_ROOT, 'tools', 'privacy-gate.ts')
     const ZERO = '0'.repeat(40)
     const anySha = '69b8c6b627f3851b7e468432d1f9ee7230a7c5a4'
     const res = spawnSync('node', [gate, '--stdin-refs'], {
@@ -1585,7 +1585,7 @@ describe('privacy-gate pre-push — a force-push is not a blocked push (2026-09-
   })
 })
 
-// ── `release.mjs --tag` 自查守卫（0.1.6 发布失败后新增）────────────────────
+// ── `release.ts --tag` 自查守卫（0.1.6 发布失败后新增）────────────────────
 //
 // 为什么需要判别力测试：这个坑踩了两次 —— tag 打在**版本还没 bump** 的提交上，
 // publish.yml 第一步就退出（`tag=0.1.6  package.json=0.1.5`）。守卫如果只对着
@@ -1602,15 +1602,21 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
     }
   })()
 
-  /** 造最小仓库：把真实 release.mjs 连同最小 package.json 放进沙箱，拓扑 A→B→M。 */
+  /** 造最小仓库：把真实 release.ts 连同最小 package.json 放进沙箱，拓扑 A→B→M。 */
   function buildCase() {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-tag-guard-'))
     mkdirSync(join(dir, 'scripts'))
-    cpSync(join(PKG_ROOT, 'scripts', 'release.mjs'), join(dir, 'scripts', 'release.mjs'))
+    cpSync(join(PKG_ROOT, 'scripts', 'release.ts'), join(dir, 'scripts', 'release.ts'))
     const writePkg = (version) =>
       writeFileSync(
         join(dir, 'package.json'),
-        JSON.stringify({ name: 'dsh-paste-dock', version, private: true }, null, 2) + '\n',
+        // type:module 与真仓 package.json 同源——沙箱里的 release.ts 带 ESM 语法，
+        // 不该只靠 Node 的模块探测兼容（那是回退路径，不是声明）。
+        JSON.stringify(
+          { name: 'dsh-paste-dock', version, private: true, type: 'module' },
+          null,
+          2,
+        ) + '\n',
       )
     const mustGit = (args) => {
       const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
@@ -1618,7 +1624,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
       return (r.stdout || '').trim()
     }
     mustGit(['init', '-q', '-b', 'main'])
-    // 分段拼出测试邮箱：本仓 gate（tools/privacy-scan.mjs）的 email 规则**没有白名单**，
+    // 分段拼出测试邮箱：本仓 gate（tools/privacy-scan.ts）的 email 规则**没有白名单**，
     // 任何邮箱形状的字面量都会被判为命中（本轮已被它拦下一次 CI）。别把它"简化"回去。
     mustGit(['config', 'user.email', ['test', 'example.com'].join(String.fromCharCode(64))])
     mustGit(['config', 'user.name', 'test'])
@@ -1640,7 +1646,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
   }
 
   const runGuard = (dir) => {
-    const r = spawnSync(process.execPath, [join(dir, 'scripts', 'release.mjs'), '--tag'], {
+    const r = spawnSync(process.execPath, [join(dir, 'scripts', 'release.ts'), '--tag'], {
       cwd: dir,
       encoding: 'utf8',
     })
@@ -1657,7 +1663,11 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
       // 读到的目标版本。这正是"照抄一行 tag 命令"会踩的形态。
       writeFileSync(
         join(dir, 'package.json'),
-        JSON.stringify({ name: 'dsh-paste-dock', version: '0.1.7', private: true }, null, 2) + '\n',
+        JSON.stringify(
+          { name: 'dsh-paste-dock', version: '0.1.7', private: true, type: 'module' },
+          null,
+          2,
+        ) + '\n',
       )
       const dirty = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', 'package.json'], {
         cwd: dir,
@@ -1716,7 +1726,7 @@ describe('release --tag self-check — proves it rejects the exact 0.1.6 failure
   })
 
   test('uses exit-code inspection instead of `|| true` (cmd.exe rejects it)', () => {
-    const src = readFileSync(join(PKG_ROOT, 'scripts', 'release.mjs'), 'utf8')
+    const src = readFileSync(join(PKG_ROOT, 'scripts', 'release.ts'), 'utf8')
     // 只扫字符串/模板内容，不扫注释（解释性注释里提到这个序列不应触发）
     assert.doesNotMatch(
       src,

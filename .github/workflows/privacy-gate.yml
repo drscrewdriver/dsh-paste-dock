@@ -57,7 +57,7 @@ jobs:
           HEAD='${{ github.event.pull_request.head.sha }}'
           git cat-file -e "${BASE}^{commit}"
           git cat-file -e "${HEAD}^{commit}"
-          node tools/privacy-gate.mjs --range "${BASE}...${HEAD}"
+          node tools/privacy-gate.ts --range "${BASE}...${HEAD}"
 
       # 阻断门（直推 main）：优先 narrowed 到本次 push 的范围；force-push 导致
       # before 不可达时退回本侧全量（--all 是 advisory，不会误报成红）。
@@ -69,18 +69,18 @@ jobs:
           AFTER='${{ github.event.after }}'
           if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo "::notice::扫描范围 ${BEFORE}..${AFTER}"
-            node tools/privacy-gate.mjs --range "${BEFORE}..${AFTER}"
+            node tools/privacy-gate.ts --range "${BEFORE}..${AFTER}"
           else
             echo "::notice::before(${BEFORE:-<empty>}) 在本次检出中不可达（force-push 的正常结果）⇒ 退回本侧全量扫描：范围偏大但不会漏。这不是故障。"
-            node tools/privacy-gate.mjs --all
+            node tools/privacy-gate.ts --all
           fi
 
       # 手动触发：全量体检（只报告不拦），用来量历史欠债。
       - name: Privacy gate full audit (advisory)
         if: github.event_name == 'workflow_dispatch'
-        run: node tools/privacy-gate.mjs --all
+        run: node tools/privacy-gate.ts --all
 
       # 规则级自测：正例必红、白名单必绿。改规则后必跑（README §五），
       # 放进 CI 是为了让「规则被改坏」不会悄悄通过。
       - name: Rule selftest
-        run: node tools/privacy-gate.mjs --selftest
+        run: node tools/privacy-gate.ts --selftest

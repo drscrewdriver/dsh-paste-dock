@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// release.mjs — dsh-paste-dock 一键发版脚本（B 方案：手动控版本号 + tag）
+// release.ts — dsh-paste-dock 一键发版脚本（B 方案：手动控版本号 + tag）
 //
 // 用法（在插件目录、你自己的终端跑）：
 //   npm run release -- patch          # 0.1.2 → 0.1.3（修 bug）
@@ -49,7 +49,9 @@ const TAG = process.argv.includes('--tag')
 // ── 参数解析 ─────────────────────────────────────────────
 const argv = process.argv.slice(2)
 const force = argv.includes('--force')
-const bump = argv.find((a) => !a.startsWith('--'))
+// 无版本参数时用空串占位：空串既过不了 VERSION_RE，也不匹配 major/minor，
+// 落到 incVersion 的 patch 分支——与旧的 undefined 完全同形，但类型是 string。
+const bump = argv.find((a) => !a.startsWith('--')) ?? ''
 // --finish / --tag 都不需要也不接受版本参数：它们处理的是"已经发出去的那个版本"，
 // 而那个版本就在 package.json 里。做成位置参数只会让人写出 `--finish 0.1.5` 这种冗余
 // 形式，且位置参数还会被当成 bump 去算下一个版本号（第一版就是这么错的）。
@@ -62,32 +64,45 @@ if (!bump && !FINISH && !TAG) {
 const VERSION_RE = /^\d+\.\d+\.\d+$/
 
 // ── 工具函数 ─────────────────────────────────────────────
-const log = (m) => console.log(`\n◆ ${m}`)
-const ok = (m) => console.log(`  ✓ ${m}`)
-const fail = (m) => {
+const log = (m: string) => console.log(`\n◆ ${m}`)
+const ok = (m: string) => console.log(`  ✓ ${m}`)
+const fail = (m: string) => {
   console.error(`  ✗ ${m}`)
   process.exit(1)
 }
 
-function sh(cmd, { silent = false } = {}) {
+/** execSync 抛出的是 Error（@types/node 不给 stderr 字段），只取这两个可读面。 */
+interface ShellError {
+  message?: string
+  stderr?: string
+}
+const errText = (e: unknown): string => {
+  const { stderr, message } = (e ?? {}) as ShellError
+  return `${stderr || message}`
+}
+
+// 注：不再显式传 shell:true —— Node 文档里 true 就是「用平台默认 shell」，
+// 与不传该选项（UNIX /bin/sh、Windows cmd.exe）同一行为，而 @types/node
+// 把 shell 定为 string，留着只会逼出一处类型假话。
+function sh(cmd: string, opts: { silent?: boolean } = {}): string {
+  const silent = opts.silent ?? false
   try {
     const out = execSync(cmd, {
       cwd: ROOT,
       encoding: 'utf8',
-      shell: true,
       stdio: silent ? 'pipe' : 'inherit',
     })
     return (out || '').trim()
   } catch (e) {
-    if (!silent) fail(`命令失败: ${cmd}\n${e.stderr || e.message}`)
+    if (!silent) fail(`命令失败: ${cmd}\n${errText(e)}`)
     throw e
   }
 }
 
 /** 跑一条 git 命令，只回退出码（不依赖 shell 的 or-兜底语法 —— Windows cmd.exe 不认）。 */
-function gitOk(args) {
+function gitOk(args: string): boolean {
   try {
-    execSync(`git ${args}`, { cwd: ROOT, stdio: 'pipe', shell: true })
+    execSync(`git ${args}`, { cwd: ROOT, stdio: 'pipe' })
     return true
   } catch {
     return false
@@ -223,8 +238,8 @@ if (FINISH) {
   process.exit(0)
 }
 
-function incVersion(ver, type) {
-  const [maj, min, pat] = ver.split('.').map(Number)
+function incVersion(ver: string, type: string): string {
+  const [maj = 0, min = 0, pat = 0] = ver.split('.').map(Number)
   if (type === 'major') return `${maj + 1}.0.0`
   if (type === 'minor') return `${maj}.${min + 1}.0`
   return `${maj}.${min}.${pat + 1}`
@@ -288,7 +303,7 @@ log('阶段 5/8  npm pack --dry-run 发布清单核对')
 // 2026-08-19 实测只打一行 tgz 名——不能依赖 plain 文本）。
 const packJson = sh('npm pack --dry-run --json', { silent: true })
 const packMeta = JSON.parse(packJson)
-const packed = packMeta?.[0]?.files?.map((f) => f.path) ?? []
+const packed = packMeta?.[0]?.files?.map((f: { path: string }) => f.path) ?? []
 console.log(
   `${packMeta?.[0]?.filename ?? '(unknown tgz)'} — ${packed.length} files, ${packMeta?.[0]?.unpackedSize ?? 0} bytes unpacked`,
 )
@@ -359,7 +374,7 @@ if (!prUrl) {
     fail(
       `分支已推送，但 gh pr create 失败（PR 没建出来）。\n` +
         `  请手动开 PR：https://github.com/<owner>/<repo>/pull/new/${branch}\n` +
-        `  ${e.stderr || e.message}`,
+        `  ${errText(e)}`,
     )
   }
 }

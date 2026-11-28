@@ -10,7 +10,7 @@
 // paste-dock 的探针断言);cordis 钉线规则同其 compat-dependencies.mjs:
 // 0.1.7+ 线宿主依赖 cordis ~4.0.4,更早线锁 4.0.2——官方 cordis 插件最新版
 // 只接受 ~4.0.4,旧宿主若浮动,HMR 服务不注册,补丁监听直接退出。
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import {
   mkdtemp,
   mkdir,
@@ -26,10 +26,10 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve, delimiter, relative, isAbsolute } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
-import { supportedHosts, peerRange } from './hosts.mjs'
+import { supportedHosts, peerRange } from './hosts.ts'
 
-const firstLine = (error) =>
-  String(error?.message || error)
+const firstLine = (error: unknown): string =>
+  String((error as Error | null)?.message || error)
     .split('\n')[0]
     .slice(0, 200)
 
@@ -78,12 +78,12 @@ const peerNames = Object.keys(manifest.peerDependencies).filter((name) =>
   name.startsWith('@deepseek-ai/dsh-'),
 )
 
-function cordisPin(hostVersion) {
+function cordisPin(hostVersion: string): string {
   const [triplet] = hostVersion.split('-')
   const [maj, min, patch] = triplet.split('.').map(Number)
   return [maj, min, patch] >= [0, 1, 7] ? '4.0.4' : '4.0.2'
 }
-const CORDIS_PLUGIN_PINS = {
+const CORDIS_PLUGIN_PINS: Record<string, Record<string, string>> = {
   '4.0.2': {
     '@deepseek-ai/cordis-plugin-group': '1.0.2',
     '@deepseek-ai/cordis-plugin-hmr': '1.0.17',
@@ -99,17 +99,22 @@ const CORDIS_PLUGIN_PINS = {
     '@deepseek-ai/cordis-plugin-timer': '1.1.6',
   },
 }
-function hostCordisOverrides(hostVersion) {
+function hostCordisOverrides(hostVersion: string): Record<string, string> {
   const cordis = cordisPin(hostVersion)
   return { '@deepseek-ai/cordis': cordis, ...CORDIS_PLUGIN_PINS[cordis] }
 }
 // pnpm 的通配 override 不保证匹配传递依赖;解析每个包时统一官方版本。
-function pinHostDependencies(manifest_, version_) {
+// 签名写在类型别名上而不是参数里：本函数要经 .toString() 嵌进 .pnpmfile.cjs，
+// 函数源文本里不能出现类型语法（Node 类型剥离会把注解替成空白，但 tsc 需要它写在一处）。
+type HostManifest = Record<string, Record<string, string> | undefined>
+type PinHostDependencies = (manifest: HostManifest, version: string) => HostManifest
+const pinHostDependencies: PinHostDependencies = function (manifest_, version_) {
   const pinned = { ...manifest_ }
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
-    if (!manifest_[field]) continue
+    const deps = manifest_[field]
+    if (!deps) continue
     pinned[field] = Object.fromEntries(
-      Object.entries(manifest_[field]).map(([name, range]) => [
+      Object.entries(deps).map(([name, range]) => [
         name,
         name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-') ? version_ : range,
       ]),
@@ -119,7 +124,7 @@ function pinHostDependencies(manifest_, version_) {
 }
 
 // 从 PATH shim 定位 npm 的 node 入口(Windows 无 pnpm 时经 npm exec 调 pnpm@10)。
-async function findNpm() {
+async function findNpm(): Promise<string> {
   for (const directory of (process.env.PATH || '').split(delimiter)) {
     const shim = join(directory, 'npm' + (process.platform === 'win32' ? '.cmd' : ''))
     try {
@@ -144,16 +149,22 @@ const npm = await findNpm()
 const sandboxRoot = await mkdtemp(join(tmpdir(), 'dsh-paste-dock-compat-'))
 const sandbox = join(sandboxRoot, version)
 await mkdir(sandbox, { recursive: true })
-const env = {
+const userProfileDir = join(sandbox, 'user')
+const env: NodeJS.ProcessEnv = {
   ...process.env,
   DSH_HOME: join(sandbox, 'home'),
-  USERPROFILE: join(sandbox, 'user'),
+  USERPROFILE: userProfileDir,
 }
-await mkdir(join(env.USERPROFILE), { recursive: true })
+await mkdir(userProfileDir, { recursive: true })
 await mkdir(join(sandbox, 'workspace'), { recursive: true })
 
-async function run(args_, cwd = sandbox, taskEnv = env, timeoutMs = 180000) {
-  return new Promise((resolveRun, reject) => {
+async function run(
+  args_: string[],
+  cwd: string = sandbox,
+  taskEnv: NodeJS.ProcessEnv = env,
+  timeoutMs = 180000,
+): Promise<string> {
+  return new Promise<string>((resolveRun, reject) => {
     const child = spawn(process.execPath, args_, {
       cwd,
       env: taskEnv,
@@ -181,10 +192,11 @@ async function run(args_, cwd = sandbox, taskEnv = env, timeoutMs = 180000) {
 }
 
 // 仅终止本脚本启动的进程树;退出有界。
-async function stopProcess(child) {
+async function stopProcess(child: ChildProcess | undefined): Promise<void> {
   if (!child || child.exitCode !== null || child.signalCode !== null) return
+  if (child.pid === undefined) return
   if (process.platform === 'win32') {
-    await new Promise((done, reject) => {
+    await new Promise<void>((done, reject) => {
       const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
         windowsHide: true,
         stdio: 'ignore',
@@ -203,14 +215,15 @@ async function stopProcess(child) {
       })
     })
   } else {
+    const pid = child.pid
     try {
-      process.kill(-child.pid, 'SIGKILL')
+      process.kill(-pid, 'SIGKILL')
     } catch (error) {
-      if (error.code !== 'ESRCH') throw error
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
     }
   }
   if (child.exitCode === null && child.signalCode === null) {
-    await new Promise((done) => {
+    await new Promise<void>((done) => {
       const timer = setTimeout(done, 10000)
       child.once('exit', () => {
         clearTimeout(timer)
@@ -220,10 +233,54 @@ async function stopProcess(child) {
   }
 }
 
-const report = { version, plugin: manifest.version, peerRange, sandbox, checks: [], warnings: [] }
-let host
+/** 证据文件 result.json 的形状：逐格跑完都要能回读这些字段。 */
+interface CompatReport {
+  version: string
+  plugin: string
+  peerRange: string
+  sandbox: string
+  checks: string[]
+  warnings: string[]
+  bootShape?: string
+  clientInjectTargets?: { sessions: boolean | undefined; connection: boolean | undefined }
+  passed?: boolean
+  error?: string
+}
+/** 探针端点回读的 checks 面（宿主逐线能力不同，全部可缺）。 */
+interface ProbeChecks {
+  pasteStore?: boolean
+  getConfig?: { ok?: boolean; error?: string; minChars?: number; minCharsSource?: string }
+  savePasteTool?: unknown
+  toolQuery?: string
+  setMinChars?: { ok?: boolean; error?: string; minChars?: number; minCharsSource?: string }
+  savePaste?: {
+    ok?: boolean
+    path?: string
+    absolutePath?: string
+    bytes?: number
+    skipped?: string
+    error?: string
+  }
+  sessions?: boolean
+  connection?: boolean
+  workspaceRegistryKeys?: unknown
+  workspaceList?: unknown
+  agentCreated?: boolean
+  agentCreateError?: string
+  sessionsKeys?: unknown
+}
+
+const report: CompatReport = {
+  version,
+  plugin: manifest.version,
+  peerRange,
+  sandbox,
+  checks: [],
+  warnings: [],
+}
+let host: ChildProcess | undefined
 let hostLog = ''
-let url
+let url = ''
 try {
   // 1. 沙箱:宿主 + 全部 dsh-* peer 同版本。
   const dependencies = Object.fromEntries([
@@ -321,7 +378,7 @@ try {
   // --port/--no-open;更早的 rc 顶层只认 --profile/--patch,web 子命令又
   // 拒收父级选项,只能裸启动(默认端口,可能开浏览器标签)。失败即换下一
   // 形态,只有最后一形态的失败才定局。
-  const bootShapes = [
+  const bootShapes: Array<[string, string[]]> = [
     [
       'A',
       [cli, '--profile', 'web', '--patch', join(sandbox, 'probe.yml'), '--port', '0', '--no-open'],
@@ -330,19 +387,22 @@ try {
   ]
   for (const [shape, cmd] of bootShapes) {
     hostLog = ''
-    host = spawn(process.execPath, cmd, {
+    // 局部常量：`host` 是外层 let，在 Promise 执行器闭包里会丢掉约简；
+    // 而回调只能跑在当前同步轮里（Promise 执行器同步调用），所以两者始终是同一个进程。
+    const proc = spawn(process.execPath, cmd, {
       cwd: join(sandbox, 'workspace'),
       env,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+    host = proc
     try {
-      url = await new Promise((resolveUrl, reject) => {
+      url = await new Promise<string>((resolveUrl, reject) => {
         const timeout = setTimeout(
           () => reject(new Error(`宿主启动超时(形态 ${shape})\n${hostLog.slice(-4000)}`)),
           60000,
         )
-        const observe = (data) => {
+        const observe = (data: Buffer | string) => {
           hostLog += data
           const match = hostLog.match(/http:\/\/(?:127\.0\.0\.1|localhost):\d+(?:\/[^\s]*)?/)
           if (match) {
@@ -350,13 +410,13 @@ try {
             resolveUrl(match[0])
           }
         }
-        host.stdout.on('data', observe)
-        host.stderr.on('data', observe)
-        host.once('error', (error) => {
+        proc.stdout?.on('data', observe)
+        proc.stderr?.on('data', observe)
+        proc.once('error', (error) => {
           clearTimeout(timeout)
           reject(error)
         })
-        host.once('exit', (code) => {
+        proc.once('exit', (code) => {
           clearTimeout(timeout)
           reject(new Error(`宿主提前退出 ${code}(形态 ${shape})\n${hostLog.slice(-2000)}`))
         })
@@ -387,7 +447,7 @@ try {
   assert.equal(response.status, 200, `探针端点 ${response.status}: ${probeText.slice(0, 2000)}`)
   const probe = JSON.parse(probeText)
   await writeFile(join(sandbox, 'probe.json'), JSON.stringify(probe, null, 2))
-  const c = probe.checks ?? {}
+  const c: ProbeChecks = probe.checks ?? {}
   assert.equal(c.pasteStore, true, 'pasteStore 服务未挂载')
   assert.equal(c.getConfig?.ok, true, `getConfig 往返失败:${c.getConfig?.error}`)
   if (c.getConfig?.minChars !== 500)
@@ -442,7 +502,7 @@ try {
   report.passed = true
 } catch (error) {
   report.passed = false
-  report.error = String((error && error.stack) || error)
+  report.error = String((error as Error | null)?.stack || error)
   console.error(report.error)
 } finally {
   try {
@@ -463,7 +523,8 @@ try {
       await cp(join(sandbox, name), join(evidence, name))
     } catch (error) {
       // finally 内不抛:证据缺失降级为警告,由 result.json 记录。
-      if (error.code !== 'ENOENT') report.warnings.push(`证据 ${name} 拷贝失败:${error.message}`)
+      const err = error as NodeJS.ErrnoException
+      if (err.code !== 'ENOENT') report.warnings.push(`证据 ${name} 拷贝失败:${err.message}`)
     }
   }
   console.log(
@@ -471,7 +532,7 @@ try {
   )
   if (serve && report.passed) {
     console.log(`浏览器验收:${url}`)
-    await new Promise((resolveStop) => {
+    await new Promise<void>((resolveStop) => {
       process.once('SIGINT', resolveStop)
       process.once('SIGTERM', resolveStop)
     })

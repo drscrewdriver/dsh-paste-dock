@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * privacy-gate.mjs —— 隐私门禁引擎（零依赖，纯 Node）
+ * privacy-gate.ts —— 隐私门禁引擎（零依赖，纯 Node）
  *
  * ┌─ 它是什么层？───────────────────────────────────────────────────────────┐
  * │ 它扫的是**产物**（要提交/要推送的文件内容），不是**命令字符串**。        │
@@ -33,25 +33,47 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 
 // ── 占位符白名单：这些"名字段"是合成的，不算身份 ──────────────────────────
-const PLACEHOLDER = /^(?:<[^>]{1,32}>|someone|someuser|user|username|test|example|your[_-]?name|web_user|w|xxx+|\.{2,})$/i
+const PLACEHOLDER =
+  /^(?:<[^>]{1,32}>|someone|someuser|user|username|test|example|your[_-]?name|web_user|w|xxx+|\.{2,})$/i
 
 // ── 规则表 ────────────────────────────────────────────────────────────────
 // ⚠️ 全部使用**有界量词**，且**禁止相邻无界量词**（见 gate-design：一条坏正则能冻死整个事件循环）。
 // ⚠️ 刻意**不**收录泛化的 `token` / `password` 模式 —— 本项目到处是 `token` 字样，
 //    上一次用它扫描把测试令牌全打成命中，"命中数"本身就不再是结论。
-const RULES = [
+interface Rule {
+  id: string
+  desc: string
+  /** 必须带 g：scanText 靠 lastIndex 逐行推。 */
+  find: RegExp
+  /** (整段匹配, 第一个捕获组) → 是否放行。捕获组缺席时为 undefined。 */
+  ignore?: (match: string, group: string | undefined) => boolean
+  fix: string
+}
+interface Finding {
+  rule: string
+  desc: string
+  fix: string
+  file: string
+  line: number
+  /** 仅 --explain 给：掩码形状 + 哈希，**不是原文**。 */
+  shape?: string
+  /** 仅追来带 commit 上下文的模式填。 */
+  commit?: string
+}
+
+const RULES: Rule[] = [
   {
     id: 'win-user-path',
     desc: 'Windows 用户名绝对路径（本机身份）',
     find: /[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/]([^\\/\s"'`|]{1,64})/g,
-    ignore: (m, name) => PLACEHOLDER.test(name),
+    ignore: (m, name) => PLACEHOLDER.test(name ?? ''),
     fix: '换成 <工作区> 或相对路径',
   },
   {
     id: 'posix-home-path',
     desc: 'POSIX 家目录绝对路径（本机身份）',
     find: /\/(?:home|Users)\/([^/\s"'`|]{1,64})/g,
-    ignore: (m, name) => PLACEHOLDER.test(name),
+    ignore: (m, name) => PLACEHOLDER.test(name ?? ''),
     fix: '换成 <工作区> 或相对路径',
   },
   {
@@ -78,7 +100,9 @@ const RULES = [
     //         连"解释这件事"的注释都不能再出现那种形状 —— 见下一行。）
     find: /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,64}(?:\.[A-Za-z0-9-]{1,64}){0,3}\.[A-Za-z]{2,10}/g,
     ignore: (m) =>
-      /@(?:users\.noreply\.github\.com|example\.(?:com|org|net)|noreply\.[A-Za-z0-9.-]{1,64})$/i.test(m),
+      /@(?:users\.noreply\.github\.com|example\.(?:com|org|net)|noreply\.[A-Za-z0-9.-]{1,64})$/i.test(
+        m,
+      ),
     fix: '提交身份用 GitHub noreply；文档里的真实邮箱换成占位符',
   },
   {
@@ -102,7 +126,7 @@ const RULES = [
     //    **长度恰好为 5** 的误报（tests/ 里的普通标识符）。真序列号 ≥8 位、IMEI 15 位、
     //    机型如 V2573A 是 6 位 ⇒ 5 位不可能是设备标识。**别再把下限调回去。**
     find: /(?:序列号|设备序列号|IMEI|设备号|机型)\s*[:：=]?\s*[`"']{0,2}([A-Za-z0-9][A-Za-z0-9_-]{5,31})/g,
-    ignore: (m, v) => PLACEHOLDER.test(v),
+    ignore: (m, v) => PLACEHOLDER.test(v ?? ''),
     fix: '换成 <设备序列号> / <机型>',
   },
   { id: 'secret-npm', desc: 'npm token', find: /npm_[A-Za-z0-9]{20,64}/g, fix: '立即吊销并轮换' },
@@ -112,20 +136,31 @@ const RULES = [
     find: /(?:ghp|gho|ghu|ghs)_[A-Za-z0-9]{20,64}|github_pat_[A-Za-z0-9_]{20,80}/g,
     fix: '立即吊销并轮换',
   },
-  { id: 'secret-openai', desc: 'API key（sk- 前缀）', find: /sk-[A-Za-z0-9]{20,80}/g, fix: '立即吊销并轮换' },
+  {
+    id: 'secret-openai',
+    desc: 'API key（sk- 前缀）',
+    find: /sk-[A-Za-z0-9]{20,80}/g,
+    fix: '立即吊销并轮换',
+  },
   { id: 'secret-aws', desc: 'AWS access key', find: /AKIA[0-9A-Z]{16}/g, fix: '立即吊销并轮换' },
-  { id: 'secret-private-key', desc: '私钥头', find: /BEGIN [A-Z ]{0,32}PRIVATE KEY/g, fix: '绝不入库' },
+  {
+    id: 'secret-private-key',
+    desc: '私钥头',
+    find: /BEGIN [A-Z ]{0,32}PRIVATE KEY/g,
+    fix: '绝不入库',
+  },
 ]
 
 /** --explain：只输出命中值的**掩码形状**与**哈希**，用于判断"真泄漏还是误报"。仍不回显原文。 */
 const EXPLAIN = process.argv.includes('--explain')
-function maskValue(v) {
+function maskValue(v: unknown): string {
   const s = String(v ?? '')
   if (s.length <= 2) return `«len=${s.length}»`
   return `${s.slice(0, 2)}***${s.slice(-1)} «len=${s.length}»`
 }
 
-const hash16 = (s) => createHash('sha256').update(String(s), 'utf8').digest('hex').slice(0, 16)
+const hash16 = (s: unknown): string =>
+  createHash('sha256').update(String(s), 'utf8').digest('hex').slice(0, 16)
 
 /**
  * 允许清单 —— **按哈希，不按原文**：`<repo>/.githooks/privacy-allow.txt`
@@ -134,10 +169,10 @@ const hash16 = (s) => createHash('sha256').update(String(s), 'utf8').digest('hex
  *    把误报的值写成原文，就等于在仓库里又抄了一遍 —— 那正是这条门禁要防的事。
  *    哈希还能防"顺手把真值也加进白名单"：加之前你得先算出它的哈希。
  */
-let ALLOW = new Map()
-function loadAllowlist(repoRoot) {
+let ALLOW = new Map<string, Set<string>>()
+function loadAllowlist(repoRoot: string): Map<string, Set<string>> {
   const p = join(repoRoot, '.githooks', 'privacy-allow.txt')
-  const map = new Map()
+  const map = new Map<string, Set<string>>()
   if (!existsSync(p)) return map
   try {
     for (const raw of readFileSync(p, 'utf8').split(/\r?\n/)) {
@@ -145,8 +180,12 @@ function loadAllowlist(repoRoot) {
       if (!line || line.startsWith('#')) continue
       const m = /^([a-z0-9-]{1,32})\s+([0-9a-f]{16})\b/.exec(line)
       if (!m) continue
-      if (!map.has(m[1])) map.set(m[1], new Set())
-      map.get(m[1]).add(m[2])
+      let hashes = map.get(m[1])
+      if (!hashes) {
+        hashes = new Set<string>()
+        map.set(m[1], hashes)
+      }
+      hashes.add(m[2])
     }
   } catch {
     /* 读不到就当没有：这是"少放行"，fail-closed 方向 */
@@ -155,8 +194,8 @@ function loadAllowlist(repoRoot) {
 }
 
 /** 扫一段文本，返回 [{rule, line}]；**不返回命中值**（--explain 只给掩码形状 + 哈希）。 */
-function scanText(text, fileLabel) {
-  const out = []
+function scanText(text: string, fileLabel: string): Finding[] {
+  const out: Finding[] = []
   const lines = text.split(/\r?\n/)
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
@@ -185,7 +224,7 @@ function scanText(text, fileLabel) {
 }
 
 // ── git 输出一律落文件，绝不用管道（沙箱/受限环境下管道会被拒）────────────
-function gitToFile(args, outPath, cwd) {
+function gitToFile(args: string[], outPath: string, cwd: string): { ok: boolean; err: string } {
   const fd = openSync(outPath, 'w')
   try {
     const res = spawnSync('git', args, { cwd, stdio: ['ignore', fd, 'inherit'] })
@@ -199,8 +238,9 @@ function gitToFile(args, outPath, cwd) {
 }
 
 /** 解析 `git diff/log -p` 输出：只取新增行，并跟踪当前文件与行号。 */
-function scanPatch(patchText, { trackCommit = false } = {}) {
-  const findings = []
+function scanPatch(patchText: string, opts: { trackCommit?: boolean } = {}): Finding[] {
+  const trackCommit = opts.trackCommit ?? false
+  const findings: Finding[] = []
   let file = '(unknown)'
   let commit = ''
   let newLine = 0
@@ -254,7 +294,7 @@ const KNOWN_GAPS = [
 //    我第一版直接抄了当时正在脱敏的真实值（热点地址 / 校园网 / 设备序列号 / 机型），
 //    拼接只让门禁认不出自己，值仍然会被提交进公开仓 —— 那等于把脱敏白做了。
 //    真实泄漏值只能进 `--explain` 的哈希，绝不能进源码。
-const J = (...p) => p.join('')
+const J = (...p: string[]) => p.join('')
 const POSITIVE = [
   ['win-user-path', J('见 C:\\Users\\', 'zhangsan', '\\dsh-workspace\\doc2md 下的文件')],
   ['posix-home-path', J('路径 /home/', 'zhangsan', '/project/x 不存在')],
@@ -295,7 +335,10 @@ const NEGATIVE = [
   // The hex run must not itself contain a 1[3-9]\d{9} sequence with non-hex neighbours,
   // or the fixture becomes a real hit for any gate that lacks the adjacency guard —
   // which is exactly what happened with the previous value (2026-09-30).
-  ['cn-mobile', 'SHA256 9f3a2b7c4e1d8056 里的十六进制子串（取值须避开 1[3-9]\\d{9}，否则夹具会被别的门禁当成真命中）'],
+  [
+    'cn-mobile',
+    'SHA256 9f3a2b7c4e1d8056 里的十六进制子串（取值须避开 1[3-9]\\d{9}，否则夹具会被别的门禁当成真命中）',
+  ],
   ['device-id', '序列号 `<设备序列号>` / 机型 `<机型>`'],
 ]
 
@@ -306,14 +349,18 @@ function selftest() {
     const hits = scanText(sample, '<selftest>')
     const ok = hits.some((h) => h.rule === want)
     if (!ok) bad += 1
-    console.log(`  ${ok ? '✓' : '✗'} ${want.padEnd(18)} ${ok ? '' : '← 未命中！'} ${JSON.stringify(sample).slice(0, 60)}`)
+    console.log(
+      `  ${ok ? '✓' : '✗'} ${want.padEnd(18)} ${ok ? '' : '← 未命中！'} ${JSON.stringify(sample).slice(0, 60)}`,
+    )
   }
   console.log('— 白名单（必须不命中）—')
   for (const [want, sample] of NEGATIVE) {
     const hits = scanText(sample, '<selftest>')
     const ok = !hits.some((h) => h.rule === want)
     if (!ok) bad += 1
-    console.log(`  ${ok ? '✓' : '✗'} ${want.padEnd(18)} ${ok ? '' : '← 误伤！'} ${JSON.stringify(sample).slice(0, 60)}`)
+    console.log(
+      `  ${ok ? '✓' : '✗'} ${want.padEnd(18)} ${ok ? '' : '← 误伤！'} ${JSON.stringify(sample).slice(0, 60)}`,
+    )
   }
   console.log('— 已知抓不到的形状（这是边界，不是承诺）—')
   for (const [what, why] of KNOWN_GAPS) console.log(`  ⚠️  ${what} —— ${why}`)
@@ -341,8 +388,8 @@ function selftest() {
 
 // ── CLI ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2)
-const has = (f) => argv.includes(f)
-const opt = (f) => {
+const has = (f: string) => argv.includes(f)
+const opt = (f: string): string | undefined => {
   const i = argv.indexOf(f)
   return i >= 0 ? argv[i + 1] : undefined
 }
@@ -359,7 +406,11 @@ const outFile = join(tmp, 'out.txt')
 try {
   if (has('--staged')) {
     mode = 'staged（暂存区新增行）'
-    const r = gitToFile(['diff', '--cached', '--unified=0', '--no-color', '--no-ext-diff'], outFile, cwd)
+    const r = gitToFile(
+      ['diff', '--cached', '--unified=0', '--no-color', '--no-ext-diff'],
+      outFile,
+      cwd,
+    )
     if (!r.ok) {
       console.error(`✗ 隐私门禁：读不到暂存区（${r.err}）⇒ fail-closed，阻断提交。`)
       process.exit(2)
@@ -376,7 +427,7 @@ try {
      * ⇒ git 报 `Invalid revision range` ⇒ 本门禁 fail-closed **阻断推送**，
      * 把「重写后的历史推不上去」变成死锁（2026-09-30 实测踩到）。
      */
-    const revExists = (rev) => {
+    const revExists = (rev: string): boolean => {
       const r = spawnSync('git', ['cat-file', '-e', `${rev}^{commit}`], { cwd, stdio: 'ignore' })
       return r.status === 0
     }
@@ -393,9 +444,26 @@ try {
       // 取舍：范围偏大 ⇒ 可能重复报出远端早已存在的历史欠债；但它**不会漏**，
       // 而漏报才是这道门唯一不可接受的失败。
       const forced = !firstPush && !revExists(remoteSha)
-      const args = firstPush || forced
-        ? ['log', '-p', '--no-color', '--no-ext-diff', '--format=commit %H', localSha, '--not', '--remotes']
-        : ['log', '-p', '--no-color', '--no-ext-diff', '--format=commit %H', `${remoteSha}..${localSha}`]
+      const args =
+        firstPush || forced
+          ? [
+              'log',
+              '-p',
+              '--no-color',
+              '--no-ext-diff',
+              '--format=commit %H',
+              localSha,
+              '--not',
+              '--remotes',
+            ]
+          : [
+              'log',
+              '-p',
+              '--no-color',
+              '--no-ext-diff',
+              '--format=commit %H',
+              `${remoteSha}..${localSha}`,
+            ]
       if (forced) {
         console.error(`  · 检测到 force-push（远端 ${remoteSha.slice(0, 12)} 在本地已不可达）`)
         console.error(`    本次按「本侧可达的全部提交」扫描 —— 范围偏大但不会漏；不是故障。`)
@@ -409,7 +477,11 @@ try {
     }
   } else if (opt('--range')) {
     mode = `range ${opt('--range')}`
-    const r = gitToFile(['log', '-p', '--no-color', '--no-ext-diff', '--format=commit %H', opt('--range')], outFile, cwd)
+    const r = gitToFile(
+      ['log', '-p', '--no-color', '--no-ext-diff', '--format=commit %H', opt('--range') ?? ''],
+      outFile,
+      cwd,
+    )
     if (!r.ok) {
       console.error(`✗ 隐私门禁：读不到范围（${r.err}）⇒ fail-closed。`)
       process.exit(2)
@@ -423,7 +495,10 @@ try {
       console.error(`✗ 隐私门禁：读不到文件清单（${r.err}）⇒ fail-closed。`)
       process.exit(2)
     }
-    for (const rel of readFileSync(listFile, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean)) {
+    for (const rel of readFileSync(listFile, 'utf8')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       const abs = join(cwd, rel)
       if (!existsSync(abs)) continue
       let buf
@@ -436,7 +511,9 @@ try {
       findings.push(...scanText(buf.toString('utf8'), rel))
     }
   } else {
-    console.error('用法: privacy-gate.mjs --staged | --stdin-refs | --range <a>..<b> | --all | --selftest')
+    console.error(
+      '用法: privacy-gate.ts --staged | --stdin-refs | --range <a>..<b> | --all | --selftest',
+    )
     process.exit(2)
   }
 } finally {
@@ -450,9 +527,11 @@ if (findings.length === 0) {
 }
 
 const advisoryOnly = has('--all') && !has('--strict')
-console.error(`\n${advisoryOnly ? '⚠️' : '✗'} 隐私门禁：发现 ${findings.length} 处${
-  advisoryOnly ? '既有' : '新增'
-}敏感内容（**值已隐去**，请自行打开对应行查看）\n`)
+console.error(
+  `\n${advisoryOnly ? '⚠️' : '✗'} 隐私门禁：发现 ${findings.length} 处${
+    advisoryOnly ? '既有' : '新增'
+  }敏感内容（**值已隐去**，请自行打开对应行查看）\n`,
+)
 for (const f of findings.slice(0, 60)) {
   const at = f.commit ? `${f.commit} ` : ''
   console.error(`   ${at}${f.file}:${f.line}   [${f.rule}] ${f.desc}`)
@@ -469,5 +548,7 @@ if (advisoryOnly) {
   console.error('\n（--all 为体检模式：只报告，不阻断。）')
   process.exit(0)
 }
-console.error('\n（确需绕过：git commit/push --no-verify。**绕过会被 git 记录在案，请勿默认使用。**）')
+console.error(
+  '\n（确需绕过：git commit/push --no-verify。**绕过会被 git 记录在案，请勿默认使用。**）',
+)
 process.exit(1)
